@@ -28,31 +28,17 @@
 #
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
-from legged_gym import LEGGED_GYM_ROOT_DIR, LEGGED_GYM_ENVS_DIR
-from legged_gym.envs.a1.a1_config import A1RoughCfg, A1RoughCfgPPO
-from .base.legged_robot import LeggedRobot
-from .base.monolegged_robot import MonoLeggedRobot
-from .anymal_c.anymal import Anymal
-from .anymal_c.mixed_terrains.anymal_c_rough_config import AnymalCRoughCfg, AnymalCRoughCfgPPO
-from .anymal_c.flat.anymal_c_flat_config import AnymalCFlatCfg, AnymalCFlatCfgPPO
-from .anymal_b.anymal_b_config import AnymalBRoughCfg, AnymalBRoughCfgPPO
-from .cassie.cassie import Cassie
-from .cassie.cassie_config import CassieRoughCfg, CassieRoughCfgPPO
-from .a1.a1_config import A1RoughCfg, A1RoughCfgPPO
-from .mevius.mevius import Mevius
-from .mevius.mevius_config import MeviusFlatCfg, MeviusFlatCfgPPO
-from .ramiel2.ramiel2 import Ramiel2
-from .ramiel2.ramiel2_config import Ramiel2FlatCfg, Ramiel2FlatCfgPPO
-
-
+from time import time
+import numpy as np
 import os
 
-from legged_gym.utils.task_registry import task_registry
+from isaacgym.torch_utils import *
+from isaacgym import gymtorch, gymapi, gymutil
 
-task_registry.register( "anymal_c_rough", Anymal, AnymalCRoughCfg(), AnymalCRoughCfgPPO() )
-task_registry.register( "anymal_c_flat", Anymal, AnymalCFlatCfg(), AnymalCFlatCfgPPO() )
-task_registry.register( "anymal_b", Anymal, AnymalBRoughCfg(), AnymalBRoughCfgPPO() )
-task_registry.register( "a1", LeggedRobot, A1RoughCfg(), A1RoughCfgPPO() )
-task_registry.register( "cassie", Cassie, CassieRoughCfg(), CassieRoughCfgPPO() )
-task_registry.register( "mevius", Mevius, MeviusFlatCfg(), MeviusFlatCfgPPO() )
-task_registry.register( "ramiel2", Ramiel2, Ramiel2FlatCfg(), Ramiel2FlatCfgPPO() )
+import torch
+from typing import Tuple, Dict
+from legged_gym.envs import MonoLeggedRobot
+
+class Ramiel2(MonoLeggedRobot):
+    def mytest(self):
+        pass
