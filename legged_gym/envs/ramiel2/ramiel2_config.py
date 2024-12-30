@@ -28,10 +28,10 @@
 #
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
-from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobotCfgPPO
+from legged_gym.envs.base.monolegged_robot_config import MonoLeggedRobotCfg, MonoLeggedRobotCfgPPO
 
-class Ramiel2FlatCfg( LeggedRobotCfg ):
-    class env( LeggedRobotCfg.env):
+class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
+    class env( MonoLeggedRobotCfg.env):
         num_envs = 2048
         num_observations = 18 + 1
         # num_observations = 169
@@ -41,7 +41,7 @@ class Ramiel2FlatCfg( LeggedRobotCfg ):
     #     measured_points_x = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5] # 1mx1m rectangle (without center line)
     #     measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]
 
-    class terrain(LeggedRobotCfg.terrain):
+    class terrain(MonoLeggedRobotCfg.terrain):
         # mesh_type = 'plane'
         # measure_heights = False
 
@@ -69,12 +69,12 @@ class Ramiel2FlatCfg( LeggedRobotCfg ):
         # trimesh only:
         slope_treshold = 0.75 # slopes above this threshold will be corrected to vertical surfaces
 
-    class init_state( LeggedRobotCfg.init_state ):
-        pos = [0.0, 0.0, 0.5] # x,y,z [m]
+    class init_state( MonoLeggedRobotCfg.init_state ):
+        pos = [0.0, 0.0, 1.0] # x,y,z [m]
         default_joint_angles = { # = target angles [rad] when action = 0.0
             'roll': 0.0,
             'pitch': 0.0,
-            'slide': 0.0,
+            'slide': -0.2,
         }
 
     class commands:
@@ -90,7 +90,7 @@ class Ramiel2FlatCfg( LeggedRobotCfg ):
             ang_vel_yaw = [-1.2, 1.2]    # min max [rad/s]
             heading = [-3.14, 3.14]
 
-    class control( LeggedRobotCfg.control ):
+    class control( MonoLeggedRobotCfg.control ):
         # PD Drive parameters:
         stiffness = {'roll': 50.0, 'pitch': 50.0, 'slide': 1000.}  # [N*m/rad]
         damping = {'roll': 2.0, 'pitch': 2.0, 'slide': 40}  # [N*m*s/rad]
@@ -99,7 +99,7 @@ class Ramiel2FlatCfg( LeggedRobotCfg ):
         # decimation: Number of control action updates @ sim DT per policy DT
         decimation = 4
 
-    class asset( LeggedRobotCfg.asset ):
+    class asset( MonoLeggedRobotCfg.asset ):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/ramiel2/urdf/ramiel2.urdf'
         name = "ramiel2"
         foot_name = 'leg_link'
@@ -117,31 +117,32 @@ class Ramiel2FlatCfg( LeggedRobotCfg ):
         push_interval_s = 12
         max_push_vel_xy = 1.
 
-    class rewards( LeggedRobotCfg.rewards ):
-        base_height_target = 0.5
+    class rewards( MonoLeggedRobotCfg.rewards ):
+        base_heightt_min = 0.5
+        base_height_max = 1.2
         soft_dof_pos_limit = 0.95
         soft_dof_vel_limit = 0.5
         soft_torque_limit = 0.8
-        max_contact_force = 1000.
+        max_contact_force = 300.
         only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
         curriculum = True
         curriculum_offset = 0.01
         curriculum_decay = 0.9999
-        class scales( LeggedRobotCfg.rewards.scales ):
+        class scales( MonoLeggedRobotCfg.rewards.scales ):
             # termination = -200.0
             tracking_lin_vel = 1.0
             tracking_ang_vel = 0.5
-            feet_air_time = 0.3
+            feet_air_time = 1.0
             action_rate = -0.05
             orientation = -10.0
-            base_height = -3.0
-            lin_vel_z = -1.0
+            base_height_range = -3.0
+            lin_vel_z = -0.01
             ang_vel_xy = -0.03
             torques = -1.0e-6
-            dof_acc = -1.0e-7
-            dof_vel = -1.0e-5
-            stand_still = -1.0
-            stand_still_contact = -1.0
+            dof_acc = -1.0e-4
+            dof_vel = -1.0e-2
+            stand_still = 0.0
+            stand_still_contact = 0.0
             stumble = -3.0
             dof_pos_limits = -100.0
             dof_vel_limits = -0.1
@@ -164,7 +165,7 @@ class Ramiel2FlatCfg( LeggedRobotCfg ):
             height_measurements = 0.1
 
 
-class Ramiel2FlatCfgPPO( LeggedRobotCfgPPO ):
+class Ramiel2FlatCfgPPO( MonoLeggedRobotCfgPPO ):
     seed = 1
     # runner_class_name = 'ActorCriticReccurent'
     # class policy:
@@ -174,19 +175,19 @@ class Ramiel2FlatCfgPPO( LeggedRobotCfgPPO ):
     #     rnn_num_layers = 1
 
     runner_class_name = 'OnPolicyRunner'
-    class policy( LeggedRobotCfgPPO.policy):
+    class policy( MonoLeggedRobotCfgPPO.policy):
         init_noise_std = 1.0
         actor_hidden_dims = [256, 128, 64]
         critic_hidden_dims = [256, 128, 64]
         activation = 'elu' # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
 
-    class algorithm( LeggedRobotCfgPPO.algorithm):
+    class algorithm( MonoLeggedRobotCfgPPO.algorithm):
         entropy_coef = 0.003
         learning_rate = 1.e-3
         clip_param = 0.2
         schedule = 'adaptive' # could be adaptive, fixed
 
-    class runner( LeggedRobotCfgPPO.runner ):
+    class runner( MonoLeggedRobotCfgPPO.runner ):
         run_name = ''
         experiment_name = 'flat_ramiel2'
         num_steps_per_env = 48 # per iteration

@@ -46,10 +46,10 @@ from legged_gym.envs.base.base_task import BaseTask
 from legged_gym.utils.terrain import Terrain
 from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi, torch_rand_sqrt_float
 from legged_gym.utils.helpers import class_to_dict
-from .legged_robot_config import LeggedRobotCfg
+from .monolegged_robot_config import MonoLeggedRobotCfg
 
 class MonoLeggedRobot(BaseTask):
-    def __init__(self, cfg: LeggedRobotCfg, sim_params, physics_engine, sim_device, headless):
+    def __init__(self, cfg: MonoLeggedRobotCfg, sim_params, physics_engine, sim_device, headless):
         """ Parses the provided config file,
             calls create_sim() (which creates, simulation, terrain and environments),
             initilizes pytorch buffers used during training
@@ -1008,18 +1008,26 @@ class MonoLeggedRobot(BaseTask):
         # Penalize non flat base orientation
         return torch.sum(torch.square(self.projected_gravity[:, :2]), dim=1)
 
-    def _reward_base_height(self):
-        # Penalize base height away from target
+    def _reward_base_height_range(self):
+        # Penalize base height if it is outside the range [base_height_min, base_height_max].
+        # Calculate the base height
         base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
-        base_diff = base_height - self.cfg.rewards.base_height_target
-        # return torch.square(base_height - self.cfg.rewards.base_height_target)
-        # base_height < target, gain is multiplied by 10
-        return torch.square(torch.where(base_diff < 0, 10*base_diff, base_diff))
+
+        # Define minimum and maximum target heights
+        base_height_min = self.cfg.rewards.base_height_min
+        base_height_max = self.cfg.rewards.base_height_max
+
+        # Calculate penalties for being outside the range
+        penalty_below = torch.where(base_height < base_height_min, base_height_min - base_height, torch.zeros_like(base_height))
+        penalty_above = torch.where(base_height > base_height_max, base_height - base_height_max, torch.zeros_like(base_height))
+
+        #return the square of the deviation
+        return torch.square(penalty_below) + torch.square(penalty_above)
 
     def _reward_torques(self):
         # Penalize torques
         # scale 3 dof torque
-        scale = torch.tensor([0.05, 0.05, 1.0], device=self.device)
+        scale = torch.tensor([1.0, 1.0, 0.05], device=self.device)
         return torch.sum(torch.square(self.torques)*scale, dim=1)*self.reward_curriculum_weight
 
     def _reward_dof_vel(self):
@@ -1028,12 +1036,12 @@ class MonoLeggedRobot(BaseTask):
 
     def _reward_dof_acc(self):
         # Penalize dof accelerations
-        scale = torch.tensor([0.05, 0.05, 1.0], device=self.device)
+        scale = torch.tensor([1.0, 1.0, 1.0], device=self.device)
         return torch.sum(torch.square((self.last_dof_vel - self.dof_vel) / self.dt)*scale, dim=1)*self.reward_curriculum_weight
 
     def _reward_action_rate(self):
         # Penalize changes in actions
-        scale = torch.tensor([0.05, 0.05, 1.0], device=self.device)
+        scale = torch.tensor([1.0, 1.0, 1.0], device=self.device)
         return torch.sum(torch.square(self.last_actions - self.actions)*scale, dim=1)*self.reward_curriculum_weight
 
     def _reward_collision(self):
@@ -1070,7 +1078,7 @@ class MonoLeggedRobot(BaseTask):
         return torch.exp(-ang_vel_error/self.cfg.rewards.tracking_sigma)
 
     def _reward_feet_air_time(self):
-        time_threshold = 0.2
+        time_threshold = 0.5
         air_time_diff = self.feet_air_time - time_threshold
         zero_reward = torch.zeros_like(air_time_diff)
         each_reward = torch.where(air_time_diff > 0, -0.1*torch.ones_like(air_time_diff), self.feet_air_time)
