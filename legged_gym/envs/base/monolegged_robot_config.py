@@ -132,8 +132,7 @@ class MonoLeggedRobotCfg(BaseConfig):
             termination = -0.0
             tracking_lin_vel = 1.0
             tracking_ang_vel = 0.5
-            lin_vel_z = -2.0
-            ang_vel_xy = -0.05
+            ang_vel_xyz = -0.05
             orientation = -0.
             torques = -0.00001
             dof_vel = -0.
@@ -171,7 +170,7 @@ class MonoLeggedRobotCfg(BaseConfig):
         noise_level = 1.0 # scales other values
         class noise_scales:
             dof_pos = 0.01
-            dof_vel = 1.5
+            dof_vel = 0.2 
             lin_vel = 0.1
             ang_vel = 0.2
             gravity = 0.05

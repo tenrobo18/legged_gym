@@ -130,14 +130,13 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         curriculum_decay = 0.9999
         class scales( MonoLeggedRobotCfg.rewards.scales ):
             # termination = -200.0
-            tracking_lin_vel = 1.0
+            tracking_lin_vel = 1.0 # fix
             tracking_ang_vel = 0.5
             feet_air_time = 1.0
             action_rate = -0.05
             orientation = -10.0
             base_height_range = -3.0
-            lin_vel_z = -0.01
-            ang_vel_xy = -0.03
+            ang_vel_xyz = -0.03
             torques = -1.0e-6
             dof_acc = -1.0e-4
             dof_vel = -1.0e-2

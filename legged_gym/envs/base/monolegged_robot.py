@@ -995,14 +995,10 @@ class MonoLeggedRobot(BaseTask):
 
         return heights.view(self.num_envs, -1) * self.terrain.cfg.vertical_scale
 
-    #------------ reward functions----------------
-    def _reward_lin_vel_z(self):
-        # Penalize z axis base linear velocity
-        return torch.square(self.base_lin_vel[:, 2])
-
-    def _reward_ang_vel_xy(self):
+    #------------ reward functions---------------- 
+    def _reward_ang_vel_xyz(self):
         # Penalize xy axes base angular velocity
-        return torch.sum(torch.square(self.base_ang_vel[:, :2]), dim=1)
+        return torch.sum(torch.square(self.base_ang_vel[:, :3]), dim=1)
 
     def _reward_orientation(self):
         # Penalize non flat base orientation
