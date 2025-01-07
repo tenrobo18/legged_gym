@@ -34,6 +34,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
     class env( MonoLeggedRobotCfg.env):
         num_envs = 2048
         num_observations = 18 + 1
+        num_privileged_obs = 18 + 1 + 16
         # num_observations = 169
         num_actions = 3
 
@@ -135,7 +136,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
             feet_air_time = 1.0
             action_rate = -0.05
             orientation = -10.0
-            base_height_range = -3.0
+            base_height_range = -10.0
             ang_vel_xyz = -0.03
             torques = -1.0e-6
             dof_acc = -1.0e-4
