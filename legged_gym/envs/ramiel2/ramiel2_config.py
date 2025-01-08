@@ -93,8 +93,8 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
 
     class control( MonoLeggedRobotCfg.control ):
         # PD Drive parameters:
-        stiffness = {'roll': 50.0, 'pitch': 50.0, 'slide': 1000.}  # [N*m/rad]
-        damping = {'roll': 2.0, 'pitch': 2.0, 'slide': 40}  # [N*m*s/rad]
+        stiffness = {'roll': 50.0, 'pitch': 50.0, 'slide': 800.}  # [N*m/rad]
+        damping = {'roll': 1.8, 'pitch': 1.8, 'slide': 32}  # [N*m*s/rad]
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 0.2
         # decimation: Number of control action updates @ sim DT per policy DT
