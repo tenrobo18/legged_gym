@@ -93,8 +93,8 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
 
     class control( MonoLeggedRobotCfg.control ):
         # PD Drive parameters:
-        stiffness = {'roll': 50.0, 'pitch': 50.0, 'slide': 800.}  # [N*m/rad]
-        damping = {'roll': 1.8, 'pitch': 1.8, 'slide': 32}  # [N*m*s/rad]
+        stiffness = {'roll': 50.0, 'pitch': 50.0, 'slide': 2000.}  # [N*m/rad]
+        damping = {'roll': 0., 'pitch': 0., 'slide': 0.}  # [N*m*s/rad]
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 0.2
         # decimation: Number of control action updates @ sim DT per policy DT
@@ -121,7 +121,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
     class rewards( MonoLeggedRobotCfg.rewards ):
         base_heightt_min = 0.5
         base_height_max = 1.2
-        soft_dof_pos_limit = 0.95
+        soft_dof_pos_limit = 0.8
         soft_dof_vel_limit = 0.5
         soft_torque_limit = 0.8
         max_contact_force = 300.
@@ -134,11 +134,11 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
             tracking_lin_vel = 1.0 # fix
             tracking_ang_vel = 0.5
             feet_air_time = 1.0
-            action_rate = -0.05
+            action_rate = -5.0
             orientation = -10.0
             base_height_range = -10.0
             ang_vel_xyz = -0.03
-            torques = -1.0e-6
+            torques = -3.0e-4
             dof_acc = -1.0e-4
             dof_vel = -1.0e-2
             stand_still = 0.0
