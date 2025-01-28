@@ -400,9 +400,9 @@ class MonoLeggedRobot(BaseTask):
             props[i]["friction"] = friction[i]
             props[i]["armature"] = armature[i]
         
-        print("damping: ", props["damping"])
-        print("friction: ", props["friction"])
-        print("armature: ", props["armature"])
+        # print("damping: ", props["damping"])
+        # print("friction: ", props["friction"])
+        # print("armature: ", props["armature"])
         return props
 
     def _process_rigid_body_props(self, props, env_id):
