@@ -69,7 +69,8 @@ class RecordedPolicy:
         Input : time (float32), qs(np.ndarray (len(self.times), 3))
         Output : q_ref (np.ndarray 3)
         """
-        index = bisect.bisect_left(self.times, time + self.start_time)
+        time_offested = time + self.start_time
+        index = bisect.bisect_left(self.times, time_offested)
         if index == 0:
             return qs[0]
         elif index == len(qs):
@@ -77,8 +78,9 @@ class RecordedPolicy:
         else:
             time1 = self.times[index-1]
             time2 = self.times[index]
-            ratio = (time - time1) / (time2 - time1)
-            return qs[index-1] * (1 - ratio) + qs[index] * ratio
+            ratio = (time_offested - time1) / (time2 - time1)
+            q = qs[index-1] * (1 - ratio) + qs[index] * ratio
+            return q
 
 def getTorchWrapper(recorded_policy, num_envs, device):
     def recordedPolicy(time):
@@ -180,53 +182,6 @@ def play(args):
         axes[1, i].legend(["tau_cur", "tau_ref", "tau_cur_isaac"])     
     plt.show()
 
-
-    # fig = plt.figure()
-    # ax_hip = fig.add_subplot(221)
-    # ax_knee = fig.add_subplot(222)
-    # ax_ankle = fig.add_subplot(223)
-    # ax_waist = fig.add_subplot(224)
-
-    # hip_name = "fl_hip_joint"
-    # hip_index = recorded_policy.joint_name[hip_name]
-    # ax_hip.plot(recorded_policy.target_joint_time, recorded_policy.target_joint_array[:, hip_index], label="target")
-    # ax_hip.plot(recorded_policy.reaction_joint_time, recorded_policy.real_reaction_joint_array[:, hip_index], label="real")
-    # ax_hip.plot(time_array, isaac_reaction_joint_array[:, hip_index], label="isaac")
-    # ax_hip.legend()
-    # ax_hip.set_title(hip_name)
-    # ax_hip.set_xlabel("time [s]")
-    # ax_hip.set_ylabel("angle [rad]")
-
-    # knee_name = "fl_knee_joint"
-    # knee_index = recorded_policy.joint_name[knee_name]
-    # ax_knee.plot(recorded_policy.target_joint_time, recorded_policy.target_joint_array[:, knee_index], label="target")
-    # ax_knee.plot(recorded_policy.reaction_joint_time, recorded_policy.real_reaction_joint_array[:, knee_index], label="real")
-    # ax_knee.plot(time_array, isaac_reaction_joint_array[:, knee_index], label="isaac")
-    # ax_knee.legend()
-    # ax_knee.set_title(knee_name)
-    # ax_knee.set_xlabel("time [s]")
-    # ax_knee.set_ylabel("angle [rad]")
-
-    # ankle_name = "fl_ankle_joint"
-    # ankle_index = recorded_policy.joint_name[ankle_name]
-    # ax_ankle.plot(recorded_policy.target_joint_time, recorded_policy.target_joint_array[:, ankle_index], label="target")
-    # ax_ankle.plot(recorded_policy.reaction_joint_time, recorded_policy.real_reaction_joint_array[:, ankle_index], label="real")
-    # ax_ankle.plot(time_array, isaac_reaction_joint_array[:, ankle_index], label="isaac")
-    # ax_ankle.legend()
-    # ax_ankle.set_title(ankle_name)
-    # ax_ankle.set_xlabel("time [s]")
-    # ax_ankle.set_ylabel("angle [rad]")
-
-    # waist_name = "waist_joint"
-    # waist_index = recorded_policy.joint_name[waist_name]
-    # ax_waist.plot(recorded_policy.target_joint_time, recorded_policy.target_joint_array[:, waist_index], label="target")
-    # ax_waist.plot(recorded_policy.reaction_joint_time, recorded_policy.real_reaction_joint_array[:, waist_index], label="real")
-    # ax_waist.plot(time_array, isaac_reaction_joint_array[:, waist_index], label="isaac")
-    # ax_waist.legend()
-    # ax_waist.set_title(waist_name)
-    # ax_waist.set_xlabel("time [s]")
-    # ax_waist.set_ylabel("angle [rad]")
-    # plt.show()
 
 
 
