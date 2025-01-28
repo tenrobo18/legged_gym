@@ -392,9 +392,17 @@ class MonoLeggedRobot(BaseTask):
                 r = self.dof_pos_limits[i, 1] - self.dof_pos_limits[i, 0]
                 self.dof_pos_limits[i, 0] = m - 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
                 self.dof_pos_limits[i, 1] = m + 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
-        armature = torch.tensor([0.54811795, 0.54811064, 9.51120847], dtype=torch.float32) #[todo] ちゃんと設定する
+        damping = torch.tensor([2., 2., 35.], dtype=torch.float32)
+        friction = torch.tensor([0.3, 0.3, 4.], dtype=torch.float32) 
+        armature = torch.tensor([0.54811795, 0.54811064, 9.51120847], dtype=torch.float32) 
         for i in range(props.size):
-            props[i][9] = armature[i]
+            props[i]["damping"] = damping[i]
+            props[i]["friction"] = friction[i]
+            props[i]["armature"] = armature[i]
+        
+        print("damping: ", props["damping"])
+        print("friction: ", props["friction"])
+        print("armature: ", props["armature"])
         return props
 
     def _process_rigid_body_props(self, props, env_id):

@@ -112,7 +112,7 @@ def play(args):
     # load data
     log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_01_27_12_38_01_rl_parameter_mintension50N.csv"
     start_time = 32.
-    end_time = 42.
+    end_time = 52.
     print(f"reading {log_file}")
     df = pd.read_csv(log_file, index_col=0)
     df.columns = df.columns.str.replace(' ', '') # remove spaces from column names
