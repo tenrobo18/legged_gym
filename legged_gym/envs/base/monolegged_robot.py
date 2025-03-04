@@ -77,6 +77,11 @@ class MonoLeggedRobot(BaseTask):
         self._prepare_reward_function()
 
         self.init_done = True
+        
+        #目標関節トルクから実際に発揮可能な関節トルクを計算するNN
+        torque_convert_net_path = f'{LEGGED_GYM_ROOT_DIR}/resources/torque_convert_nets/ramiel2_torque_convert_net.pt'
+        self.torque_convert_net = torch.jit.load(torque_convert_net_path).to(self.device)
+        self.torque_convert_net.eval()
 
     def render(self):
         if self.camera_track_robot:
@@ -522,7 +527,20 @@ class MonoLeggedRobot(BaseTask):
             torques = actions_scaled
         else:
             raise NameError(f"Unknown controller type: {control_type}")
-        return torch.clip(torques, -self.torque_limits, self.torque_limits)
+        torques_clipped =  torch.clip(torques, -self.torque_limits, self.torque_limits)
+
+        #トルク変換NNに入力するために, 関節角度とトルクを正規化する
+        dof_pos_input_normalized = (self.dof_pos - self.dof_pos_limits[:, 0]) / (self.dof_pos_limits[:, 1] - self.dof_pos_limits[:, 0])
+        torques_input_normalized = (torques_clipped + self.torque_limits) / (2 * self.torque_limits)
+        nn_input = torch.cat([dof_pos_input_normalized, torques_input_normalized], dim=1)
+
+        #現在の関節角度と目標発揮トルクから実際に発揮可能なトルク(正規化)を計算
+        torques_output_normalized = self.torque_convert_net(nn_input)
+        
+        #トルクのスケールを元に戻す
+        torques_output = torques_output_normalized * (2 * self.torque_limits) - self.torque_limits
+
+        return torques_output
 
     def _reset_dofs(self, env_ids):
         """ Resets DOF position and velocities of selected environmments
