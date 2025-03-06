@@ -44,6 +44,12 @@ import bisect
 import scipy
 import matplotlib.pyplot as plt
 
+#params
+fixed = False
+log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_03_06_11_19_24_kp50_50_2000_kd0_0_iter10000_currentpgain-8.csv"
+start_time = 16.65
+end_time = 18.
+
 class RecordedPolicy:
     def __init__(self, df_):
 
@@ -57,12 +63,30 @@ class RecordedPolicy:
         self.q_refs = np.zeros((len(self.times), 3))
         self.tau_curs = np.zeros((len(self.times), 3))
         self.tau_refs = np.zeros((len(self.times), 3))
+        self.pos_curs = np.zeros((len(self.times), 3))
+        self.quat_curs = np.zeros((len(self.times), 4))
+        self.lin_vel_curs = np.zeros((len(self.times), 3))
+        self.ang_vel_curs = np.zeros((len(self.times), 3))
         for i in range(3):
             self.q_curs[:, i] = self.df[[f"q{i}[rad]"]].to_numpy(copy=True).flatten()
             self.dq_curs[:, i] = self.df[[f"dq_cur{i}[rad/s]"]].to_numpy(copy=True).flatten()           
             self.q_refs[:, i] = self.df[[f"q_ref{i}[rad]"]].to_numpy(copy=True).flatten()
             self.tau_curs[:, i] = self.df[[f"tau_cur{i}[Nm]"]].to_numpy(copy=True).flatten()
             self.tau_refs[:, i] = self.df[[f"tau_ref{i}[Nm]"]].to_numpy(copy=True).flatten()
+            self.pos_curs[:, 0] = self.df[[f"pose_cur_pos_x[m]"]].to_numpy(copy=True).flatten()
+            self.pos_curs[:, 1] = self.df[[f"pose_cur_pos_y[m]"]].to_numpy(copy=True).flatten()
+            self.pos_curs[:, 2] = self.df[[f"pose_cur_pos_z[m]"]].to_numpy(copy=True).flatten()
+            self.quat_curs[:, 0] = self.df[[f"pose_cur_ori_x"]].to_numpy(copy=True).flatten()
+            self.quat_curs[:, 1] = self.df[[f"pose_cur_ori_y"]].to_numpy(copy=True).flatten()
+            self.quat_curs[:, 2] = self.df[[f"pose_cur_ori_z"]].to_numpy(copy=True).flatten()
+            self.quat_curs[:, 3] = self.df[[f"pose_cur_ori_w"]].to_numpy(copy=True).flatten()
+            self.lin_vel_curs[:, 0] = self.df[[f"twist_cur_robot_pos_x[m/s]"]].to_numpy(copy=True).flatten()
+            self.lin_vel_curs[:, 1] = self.df[[f"twist_cur_robot_pos_y[m/s]"]].to_numpy(copy=True).flatten()
+            self.lin_vel_curs[:, 2] = self.df[[f"twist_cur_robot_pos_z[m/s]"]].to_numpy(copy=True).flatten()
+            self.ang_vel_curs[:, 0] = self.df[[f"twist_cur_robot_ang_x[rad/s]"]].to_numpy(copy=True).flatten()
+            self.ang_vel_curs[:, 1] = self.df[[f"twist_cur_robot_ang_y[rad/s]"]].to_numpy(copy=True).flatten()
+            self.ang_vel_curs[:, 2] = self.df[[f"twist_cur_robot_ang_z[rad/s]"]].to_numpy(copy=True).flatten()
+
 
     def get_q(self, time, qs):
         """
@@ -103,16 +127,15 @@ def play(args):
     env_cfg.domain_rand.randomize_friction = False
     env_cfg.domain_rand.push_robots = False
     env_cfg.terrain.mesh_type = 'plane'
-    env_cfg.asset.fix_base_link = True 
+    env_cfg.asset.terminate_after_contacts_on = []
+    if fixed:
+        env_cfg.asset.fix_base_link = True 
 
     # prepare environment
     env, _ = task_registry.make_env(name=args.task, args=args, env_cfg=env_cfg)
     obs = env.get_observations()
 
     # load data
-    log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_01_27_12_38_01_rl_parameter_mintension50N.csv"
-    start_time = 32.
-    end_time = 52.
     print(f"reading {log_file}")
     df = pd.read_csv(log_file, index_col=0)
     df.columns = df.columns.str.replace(' ', '') # remove spaces from column names
@@ -125,6 +148,9 @@ def play(args):
     isaac_q_curs = np.zeros((num_steps, 3))
     isaac_dq_curs = np.zeros((num_steps, 3))
     isaac_tau_curs = np.zeros((num_steps, 3))
+    isaac_quat_curs = np.zeros((num_steps, 4))
+    isaac_lin_vel_curs = np.zeros((num_steps, 3))
+    isaac_ang_vel_curs = np.zeros((num_steps, 3))
     time_array = np.zeros((num_steps, 1))
 
     # set delay
@@ -150,9 +176,19 @@ def play(args):
                                                  gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
             isaac_q_curs[i] = recorded_policy.q_curs[0]
             
-            #root linkの位置を調整
+            #root linkの姿勢, 速度を調整
+            pos_cur_tensor = torch.tensor(recorded_policy.pos_curs[0], device=env.device, dtype=env.dof_pos.dtype)
+            quat_cur_tensor = torch.tensor(recorded_policy.quat_curs[0], device=env.device, dtype=env.dof_pos.dtype)
+            lin_vel_cur_tensor = torch.tensor(recorded_policy.lin_vel_curs[0], device=env.device, dtype=env.dof_pos.dtype)
+            ang_vel_cur_tensor = torch.tensor(recorded_policy.ang_vel_curs[0], device=env.device, dtype=env.dof_pos.dtype)
             env.root_states[env_ids] = env.base_init_state
-            env.root_states[env_ids, 2] += 1.0 #upward robot for 1m  
+            if fixed:
+                env.root_states[env_ids, 2] += 1.0 #upward robot for 1m  
+            else:
+                env.root_states[env_ids, 2] += pos_cur_tensor[2].unsqueeze(0).repeat(env.num_envs, 1).to(env.device)[2] - 0.7
+                env.root_states[env_ids, 3:7] = quat_cur_tensor.unsqueeze(0).repeat(env.num_envs, 1).to(env.device)
+                env.root_states[env_ids, 7:10] = lin_vel_cur_tensor.unsqueeze(0).repeat(env.num_envs, 1).to(env.device)
+                env.root_states[env_ids, 10:13] = ang_vel_cur_tensor.unsqueeze(0).repeat(env.num_envs, 1).to(env.device)
             env.gym.set_actor_root_state_tensor_indexed(env.sim,
                                                 gymtorch.unwrap_tensor(env.root_states),
                                                 gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
@@ -164,10 +200,11 @@ def play(args):
             # actions[:] = 0.
             obs, _, rews, dones, infos = env.step(actions)
             isaac_q_curs[i] = (obs[0, 12:15] + env.default_dof_pos.squeeze()).cpu().numpy()
-            isaac_tau_curs[i] = env.torques[0, :].cpu().numpy()
+            isaac_tau_curs[i] = env.torques[0, :].detach().cpu().numpy()
+            isaac_lin_vel_curs[i] = env.base_lin_vel[0, :].detach().cpu().numpy()
 
 
-    fig, axes = plt.subplots(nrows=2, ncols=3)
+    fig, axes = plt.subplots(nrows=3, ncols=3)
     for i in range(3):
         axes[0, i].title.set_text(f"q {i}")
         axes[0, i].plot(recorded_policy.times, recorded_policy.q_curs[:,i])
@@ -179,7 +216,12 @@ def play(args):
         axes[1, i].plot(recorded_policy.times, recorded_policy.tau_curs[:,i])
         axes[1, i].plot(recorded_policy.times, recorded_policy.tau_refs[:,i])
         axes[1, i].plot(time_array, isaac_tau_curs[:,i])
-        axes[1, i].legend(["tau_cur", "tau_ref", "tau_cur_isaac"])     
+        axes[1, i].legend(["tau_cur", "tau_ref", "tau_cur_isaac"])   
+
+        axes[2, i].title.set_text(f"lin_vel{i}")
+        axes[2, i].plot(recorded_policy.times, recorded_policy.lin_vel_curs[:,i])
+        axes[2, i].plot(time_array, isaac_lin_vel_curs[:,i])
+        axes[2, i].legend(["lin_vel_cur", "lin_vel_cur_isaac"])  
     plt.show()
 
 
