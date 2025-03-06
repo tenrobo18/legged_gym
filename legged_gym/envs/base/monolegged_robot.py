@@ -216,6 +216,8 @@ class MonoLeggedRobot(BaseTask):
             self.update_reward_curriculum(env_ids)
         if self.cfg.noise.curriculum:
             self.update_noise_curriculum(env_ids)
+        if self.cfg.domain_rand.curriculum:
+            self.update_rand_curriculum(env_ids)
 
         # reset robot states
         self._reset_dofs(env_ids)
@@ -420,11 +422,16 @@ class MonoLeggedRobot(BaseTask):
         # randomize base mass
         if self.cfg.domain_rand.randomize_mass:
             body_indices = self.cfg.domain_rand.added_mass_rigid_body_indices
-            rate = self.cfg.domain_rand.added_mass_rate
+            mass_rate = self.cfg.domain_rand.added_mass_rate
+            com_range = self.cfg.domain_rand.com_range
             for i, body_index in enumerate(body_indices):
-                mass_rnd = np.random.uniform(-rate[i], rate[i])
-                inertia_rnd = np.random.uniform(-rate[i], rate[i])
+                mass_rnd = np.random.uniform(-mass_rate[i], mass_rate[i])
+                inertia_rnd = np.random.uniform(-mass_rate[i], mass_rate[i])
+                com_rnd = np.random.uniform(-com_range[i], com_range[i])
                 props[body_index].mass *= (1 + mass_rnd)
+                props[body_index].com.x += com_rnd
+                props[body_index].com.y += com_rnd
+                props[body_index].com.z += com_rnd
                 props[body_index].inertia.x.x *= (1 + inertia_rnd)
                 props[body_index].inertia.x.y *= (1 + inertia_rnd)
                 props[body_index].inertia.x.z *= (1 + inertia_rnd)
@@ -561,7 +568,8 @@ class MonoLeggedRobot(BaseTask):
     def _reset_root_states(self, env_ids):
         """ Resets ROOT states position and velocities of selected environmments
             Sets base position based on the curriculum
-            Selects randomized base velocities within -0.5:0.5 [m/s, rad/s]
+            Selects randomized base velocities within -0.5:0.5 except z[m/s, rad/s]
+            Selects randomized base velocity z within 1:3 m/s
         Args:
             env_ids (List[int]): Environemnt ids
         """
@@ -570,7 +578,7 @@ class MonoLeggedRobot(BaseTask):
             self.root_states[env_ids] = self.base_init_state
             self.root_states[env_ids, :3] += self.env_origins[env_ids]
             self.root_states[env_ids, :2] += torch_rand_float(-1., 1., (len(env_ids), 2), device=self.device) # xy position within 1m of the center
-            self.root_states[env_ids, 2] += 0.05 # z position 0.1m above the ground
+            self.root_states[env_ids, 2] += 0.05 + torch_rand_float(-0.1, 0.1, (len(env_ids), 1), device=self.device).squeeze(1) # z position 0.1m above the ground
         else:
             self.root_states[env_ids] = self.base_init_state
             self.root_states[env_ids, :3] += self.env_origins[env_ids]
@@ -580,7 +588,16 @@ class MonoLeggedRobot(BaseTask):
         yaw = torch.empty(len(env_ids), device=self.device).uniform_(-3.14, 3.14)
         self.root_states[env_ids, 3:7] = quat_mul(quat_from_euler_xyz(roll, pitch, yaw), self.root_states[env_ids, 3:7])
         # base velocities
-        self.root_states[env_ids, 7:13] = torch_rand_float(-0.5, 0.5, (len(env_ids), 6), device=self.device) # [7:10]: lin vel, [10:13]: ang vel
+        lin_vel_z_min = torch.full((len(env_ids),), -0.5, device=self.device)
+        lin_vel_z_max_start = 0.5
+        lin_vel_z_max_end = 3.
+        lin_vel_z_max = torch.zeros(len(env_ids), device=self.device)
+        #calc lin_vel_z_ave from rand_curriculum_weight
+        if self.cfg.domain_rand.curriculum:
+            lin_vel_z_max = lin_vel_z_max_start + (lin_vel_z_max_end - lin_vel_z_max_start) * self.rand_curriculum_weight[env_ids]
+        self.root_states[env_ids, 7:9] = torch_rand_float(-0.5, 0.5, (len(env_ids), 2), device=self.device) # [7:9]: lin vel x, y, 
+        self.root_states[env_ids, 9] = lin_vel_z_min + (lin_vel_z_max - lin_vel_z_min) * torch_rand_float(0., 1.0, (len(env_ids), 1), device=self.device).squeeze(1)  # 9: lin_vel z
+        self.root_states[env_ids, 10:13] = torch_rand_float(-0.5, 0.5, (len(env_ids), 3), device=self.device) #[10:13]: ang vel
         env_ids_int32 = env_ids.to(dtype=torch.int32)
         self.gym.set_actor_root_state_tensor_indexed(self.sim,
                                                      gymtorch.unwrap_tensor(self.root_states),
@@ -653,6 +670,9 @@ class MonoLeggedRobot(BaseTask):
 
     def update_noise_curriculum(self, env_ids):
         self.noise_curriculum_weight[:] = pow(self.noise_curriculum_weight[:], self.cfg.noise.curriculum_decay)
+
+    def update_rand_curriculum(self, env_ids):
+        self.rand_curriculum_weight[:] = pow(self.rand_curriculum_weight[:], self.cfg.domain_rand.curriculum_decay)
 
     def _get_noise_scale_vec(self, cfg):
         """ Sets a vector used to scale the noise added to the observations.
@@ -733,6 +753,9 @@ class MonoLeggedRobot(BaseTask):
         self.noise_curriculum_weight = torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
         if self.cfg.noise.curriculum:
             self.noise_curriculum_weight *= self.cfg.noise.curriculum_offset
+        self.rand_curriculum_weight = torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        if self.cfg.domain_rand.curriculum:
+            self.rand_curriculum_weight *= self.cfg.domain_rand.curriculum_offset
         self.feet_air_time = torch.zeros(self.num_envs, self.feet_indices.shape[0], dtype=torch.float, device=self.device, requires_grad=False)
         self.last_contacts = torch.zeros(self.num_envs, len(self.feet_indices), dtype=torch.bool, device=self.device, requires_grad=False)
         self.base_lin_vel = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
