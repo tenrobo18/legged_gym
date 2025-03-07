@@ -427,11 +427,10 @@ class MonoLeggedRobot(BaseTask):
             for i, body_index in enumerate(body_indices):
                 mass_rnd = np.random.uniform(-mass_rate[i], mass_rate[i])
                 inertia_rnd = np.random.uniform(-mass_rate[i], mass_rate[i])
-                com_rnd = np.random.uniform(-com_range[i], com_range[i])
                 props[body_index].mass *= (1 + mass_rnd)
-                props[body_index].com.x += com_rnd
-                props[body_index].com.y += com_rnd
-                props[body_index].com.z += com_rnd
+                props[body_index].com.x += np.random.uniform(-com_range[i], com_range[i])
+                props[body_index].com.y += np.random.uniform(-com_range[i], com_range[i])
+                props[body_index].com.z += np.random.uniform(-com_range[i], com_range[i])
                 props[body_index].inertia.x.x *= (1 + inertia_rnd)
                 props[body_index].inertia.x.y *= (1 + inertia_rnd)
                 props[body_index].inertia.x.z *= (1 + inertia_rnd)
