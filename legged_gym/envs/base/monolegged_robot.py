@@ -541,10 +541,13 @@ class MonoLeggedRobot(BaseTask):
         nn_input = torch.cat([dof_pos_input_normalized, torques_input_normalized], dim=1)
 
         #現在の関節角度と目標発揮トルクから実際に発揮可能なトルク(正規化)を計算
-        torques_output_normalized = self.torque_convert_net(nn_input)
+        torques_nn_normalized = self.torque_convert_net(nn_input)
         
         #トルクのスケールを元に戻す
-        torques_output = torques_output_normalized * (2 * self.torque_limits) - self.torque_limits
+        torques_nn = torques_nn_normalized * (2 * self.torque_limits) - self.torque_limits
+
+        #トルクにローパスフィルタをかける
+        torques_output = self.torques + self.dt * (torques_nn - self.torques) / self.dynprms
 
         return torques_output
 
@@ -732,6 +735,7 @@ class MonoLeggedRobot(BaseTask):
         self.actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
         self.last_actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
         self.last_last_actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
+        self.dynprms = self.cfg.domain_rand.dynprm_range[0] + (self.cfg.domain_rand.dynprm_range[1] - self.cfg.domain_rand.dynprm_range[0]) * torch_rand_float(0., 1., (self.num_envs, 1), device=self.device)
 
         # self.actions_delay_range = [0.04-0.0025, 0.04+0.0075]
         self.actions_delay_range = self.cfg.commands.delay_range

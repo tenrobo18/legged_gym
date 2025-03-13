@@ -121,6 +121,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         curriculum = True
         curriculum_offset = 0.01
         curriculum_decay = 0.99997
+        dynprm_range = [0.02, 0.06]
 
     class rewards( MonoLeggedRobotCfg.rewards ):
         base_heightt_min = 0.5
