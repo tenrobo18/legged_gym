@@ -358,8 +358,6 @@ class MonoLeggedRobot(BaseTask):
                 friction_buckets[:] = r.uniform_(0.0, 1.0)  # High friction
                 idx = slice(0, int(num_buckets * 0.2))
                 friction_buckets[idx] = r.uniform_(-0.6, -0.4)[idx]  # Low friction
-                idx = slice(0, int(num_buckets * 0.01))
-                friction_buckets[idx] = r.uniform_(-0.9, -0.8)[idx]  # Super low friction
 
                 bucket_ids = torch.randint(0, num_buckets, (self.num_envs, 1))  # One leg
                 self._friction_coeffs = friction_buckets[bucket_ids]

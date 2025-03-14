@@ -86,8 +86,8 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         heading_command = False # if true: compute ang vel command from heading error
         delay_range = [0.00, 0.04]
         class ranges:
-            lin_vel_x = [-1.0, 1.0] # min max [m/s]
-            lin_vel_y = [-0.8, 0.8]   # min max [m/s]
+            lin_vel_x = [-0.3, 0.3] # min max [m/s]
+            lin_vel_y = [-0.3, 0.3]   # min max [m/s]
             ang_vel_yaw = [-1.2, 1.2]    # min max [rad/s]
             heading = [-3.14, 3.14]
 
@@ -117,7 +117,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         com_range = [0.03, 0.0, 0.0, 0.0] #com randomization range [m]
         push_robots = True
         push_interval_s = 4.
-        max_push_vel_xy = 1.
+        max_push_vel_xy = 0.3
         curriculum = True
         curriculum_offset = 0.01
         curriculum_decay = 0.99997
