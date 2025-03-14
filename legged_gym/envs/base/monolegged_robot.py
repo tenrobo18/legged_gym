@@ -547,7 +547,7 @@ class MonoLeggedRobot(BaseTask):
         torques_nn = torques_nn_normalized * (2 * self.torque_limits) - self.torque_limits
 
         #トルクにローパスフィルタをかける
-        torques_output = self.torques + self.dt * (torques_nn - self.torques) / self.dynprms
+        torques_output = self.torques + self.sim_params.dt * (torques_nn - self.torques) / self.dynprms
 
         return torques_output
 
