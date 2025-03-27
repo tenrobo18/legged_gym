@@ -45,10 +45,10 @@ import scipy
 import matplotlib.pyplot as plt
 
 #params
-fixed = False
-log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_03_06_11_19_24_kp50_50_2000_kd0_0_iter10000_currentpgain-8.csv"
-start_time = 16.65
-end_time = 18.
+fixed = True
+log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_01_27_12_38_01_rl_parameter_mintension50N.csv"
+start_time = 55.
+end_time = 65.
 
 class RecordedPolicy:
     def __init__(self, df_):
@@ -73,19 +73,19 @@ class RecordedPolicy:
             self.q_refs[:, i] = self.df[[f"q_ref{i}[rad]"]].to_numpy(copy=True).flatten()
             self.tau_curs[:, i] = self.df[[f"tau_cur{i}[Nm]"]].to_numpy(copy=True).flatten()
             self.tau_refs[:, i] = self.df[[f"tau_ref{i}[Nm]"]].to_numpy(copy=True).flatten()
-            self.pos_curs[:, 0] = self.df[[f"pose_cur_pos_x[m]"]].to_numpy(copy=True).flatten()
-            self.pos_curs[:, 1] = self.df[[f"pose_cur_pos_y[m]"]].to_numpy(copy=True).flatten()
-            self.pos_curs[:, 2] = self.df[[f"pose_cur_pos_z[m]"]].to_numpy(copy=True).flatten()
-            self.quat_curs[:, 0] = self.df[[f"pose_cur_ori_x"]].to_numpy(copy=True).flatten()
-            self.quat_curs[:, 1] = self.df[[f"pose_cur_ori_y"]].to_numpy(copy=True).flatten()
-            self.quat_curs[:, 2] = self.df[[f"pose_cur_ori_z"]].to_numpy(copy=True).flatten()
-            self.quat_curs[:, 3] = self.df[[f"pose_cur_ori_w"]].to_numpy(copy=True).flatten()
-            self.lin_vel_curs[:, 0] = self.df[[f"twist_cur_robot_pos_x[m/s]"]].to_numpy(copy=True).flatten()
-            self.lin_vel_curs[:, 1] = self.df[[f"twist_cur_robot_pos_y[m/s]"]].to_numpy(copy=True).flatten()
-            self.lin_vel_curs[:, 2] = self.df[[f"twist_cur_robot_pos_z[m/s]"]].to_numpy(copy=True).flatten()
-            self.ang_vel_curs[:, 0] = self.df[[f"twist_cur_robot_ang_x[rad/s]"]].to_numpy(copy=True).flatten()
-            self.ang_vel_curs[:, 1] = self.df[[f"twist_cur_robot_ang_y[rad/s]"]].to_numpy(copy=True).flatten()
-            self.ang_vel_curs[:, 2] = self.df[[f"twist_cur_robot_ang_z[rad/s]"]].to_numpy(copy=True).flatten()
+        self.pos_curs[:, 0] = self.df[[f"pose_cur_pos_x[m]"]].to_numpy(copy=True).flatten()
+        self.pos_curs[:, 1] = self.df[[f"pose_cur_pos_y[m]"]].to_numpy(copy=True).flatten()
+        self.pos_curs[:, 2] = self.df[[f"pose_cur_pos_z[m]"]].to_numpy(copy=True).flatten()
+        self.quat_curs[:, 0] = self.df[[f"pose_cur_ori_x"]].to_numpy(copy=True).flatten()
+        self.quat_curs[:, 1] = self.df[[f"pose_cur_ori_y"]].to_numpy(copy=True).flatten()
+        self.quat_curs[:, 2] = self.df[[f"pose_cur_ori_z"]].to_numpy(copy=True).flatten()
+        self.quat_curs[:, 3] = self.df[[f"pose_cur_ori_w"]].to_numpy(copy=True).flatten()
+        self.lin_vel_curs[:, 0] = self.df[[f"twist_cur_robot_pos_x[m/s]"]].to_numpy(copy=True).flatten()
+        self.lin_vel_curs[:, 1] = self.df[[f"twist_cur_robot_pos_y[m/s]"]].to_numpy(copy=True).flatten()
+        self.lin_vel_curs[:, 2] = self.df[[f"twist_cur_robot_pos_z[m/s]"]].to_numpy(copy=True).flatten()
+        self.ang_vel_curs[:, 0] = self.df[[f"twist_cur_robot_ang_x[rad/s]"]].to_numpy(copy=True).flatten()
+        self.ang_vel_curs[:, 1] = self.df[[f"twist_cur_robot_ang_y[rad/s]"]].to_numpy(copy=True).flatten()
+        self.ang_vel_curs[:, 2] = self.df[[f"twist_cur_robot_ang_z[rad/s]"]].to_numpy(copy=True).flatten()
 
 
     def get_q(self, time, qs):
