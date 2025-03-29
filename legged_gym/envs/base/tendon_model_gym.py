@@ -3,164 +3,152 @@ import yaml
 import xml.etree.ElementTree as ET
 
 class TendonRobotModel:
-    class Joint:
-        def __init__(self, name, joint_type, origin_init, axis_init, device):
-            self.name = name
-            self.type = joint_type  # "revolute" または "prismatic"
-            self.device = device
-            # 初期位置・軸をGPU上のtensorとして保持
-            self.origin_init = torch.tensor(origin_init, dtype=torch.float32, device=self.device)
-            self.axis_init = torch.tensor(axis_init, dtype=torch.float32, device=self.device)
-            # 初期状態ではorigin, axisはinit値と同じ
-            self.origin = self.origin_init.clone()
-            self.axis = self.axis_init.clone()
-            # 関節角度（または変位）; スカラーtensor
-            self.dof_pos = torch.tensor(0.0, dtype=torch.float32, device=self.device)
-
-    class Via:
-        def __init__(self, name, device, via_rigid_body_indices=None):
-            self.name = name
-            self.device = device
-            # viaの位置は3次元ベクトル
-            self.pos = torch.zeros(3, dtype=torch.float32, device=self.device)
-            # rigid_body_state中での親リンクのindexリスト
-            self.via_rigid_body_indices = via_rigid_body_indices if via_rigid_body_indices is not None else []
-
-    class Tendon:
-        def __init__(self, name, via_list_info, device):
-            self.name = name
-            self.device = device
-            # ワイヤ長（scalarのGPU tensor）
-            self.l = torch.tensor(0.0, dtype=torch.float32, device=self.device)
-            # 各via情報（yaml中のViaPoints情報をもとに、nameなどを初期化）
-            self.vias = []
-            # via_list_infoは各viaの辞書（例：{"ParentLink": "point_base_0_0"}）のリスト
-            for via_info in via_list_info:
-                via = TendonRobotModel.Via(name=via_info["ParentLink"], device=self.device, via_rigid_body_indices=[])
-                self.vias.append(via)
-
-    def __init__(self, yaml_path, urdf_path, device):
+    def __init__(self, yaml_path, urdf_path, num_envs, device):
         """
-        1. params.yamlを読み込み、JointList（ジョイント名）およびTendonList（各テンドンのViaPointsのname）を取得
-        2. URDFを読み込み、各jointについて同一の名前を持つjointのorigin, axis, typeをコピーして上書きする
+        Args:
+            yaml_path (str): パラメータファイル（params.yaml）のパス
+            urdf_path (str): URDFファイルのパス
+            num_envs (int): 環境数（バッチサイズ）
+            device (torch.device): GPUなどのデバイス
         """
-        self.joints = []   # Jointのリスト
-        self.tendons = []  # Tendonのリスト
-
         self.device = device
+        self.num_envs = num_envs
 
-        # YAMLの読み込み
+        # YAMLからジョイント情報とワイヤ情報を読み込む
         with open(yaml_path, 'r') as f:
             params = yaml.safe_load(f)
-        joint_names = params["JointList"]
+        self.joint_names = params["JointList"]
+        self.num_joints = len(self.joint_names)
         
-        # YAML上での初期値（仮の値）を設定
-        # ※URDFの情報で上書きされるので、ここではダミー値でOKです。
-        for name in joint_names:
-            # 仮のaxis_init, origin_init
-            origin_init = [0, 0, 0]
-            axis_init = [0, 0, 1]
-            # 一旦"revolute"として生成；URDFで上書きします
-            joint = TendonRobotModel.Joint(name, "revolute", origin_init, axis_init, self.device)
-            self.joints.append(joint)
-        
-        # TendonListの読み込み
         tendon_list = params["TendonList"]
+        self.num_tendons = len(tendon_list)
+        # 各ワイヤについて、viaの名前リストを保持
+        self.tendon_via_names = []
         for tendon_info in tendon_list:
-            tendon_id = tendon_info["TendonId"]
             via_points = tendon_info["ViaPoints"]
-            tendon = TendonRobotModel.Tendon(name=f"tendon_{tendon_id}", via_list_info=via_points, device=self.device)
-            self.tendons.append(tendon)
-
-        # URDFの読み込み：各<joint>要素からname, type, origin, axisを取得
+            via_names = [via_info["ParentLink"] for via_info in via_points]
+            self.tendon_via_names.append(via_names)
+        
+        # バッチ用のジョイントパラメータを初期化
+        # 各ジョイントは shape=(num_envs, 3) のテンソルで管理
+        self.joint_origin_init = torch.zeros((num_envs, self.num_joints, 3), dtype=torch.float32, device=device)
+        self.joint_axis_init = torch.zeros((num_envs, self.num_joints, 3), dtype=torch.float32, device=device)
+        # 現在のジョイント状態
+        self.joint_origin = torch.zeros((num_envs, self.num_joints, 3), dtype=torch.float32, device=device)
+        self.joint_axis = torch.zeros((num_envs, self.num_joints, 3), dtype=torch.float32, device=device)
+        # 関節角度／変位
+        self.joint_dof_pos = torch.zeros((num_envs, self.num_joints), dtype=torch.float32, device=device)
+        # 各ジョイントの種類（"revolute" か "prismatic"/"slide"）
+        self.joint_types = ["revolute"] * self.num_joints  # 仮の初期値
+        
+        # URDFから各ジョイントのorigin, axis, typeを取得し上書きする
         tree = ET.parse(urdf_path)
         root = tree.getroot()
         for joint_elem in root.findall("joint"):
             jname = joint_elem.get("name")
-            jtype = joint_elem.get("type")
-            mapped_type = "revolute" if jtype == "revolute" else ("prismatic" if jtype == "prismatic" else jtype)
-            
-            # origin要素のパース（xyz属性）
-            origin_elem = joint_elem.find("origin")
-            if origin_elem is not None:
-                origin_str = origin_elem.get("xyz", "0 0 0")
-                origin_list = [float(x) for x in origin_str.split()]
-            else:
-                origin_list = [0, 0, 0]
-            
-            # axis要素のパース（xyz属性）
-            axis_elem = joint_elem.find("axis")
-            if axis_elem is not None:
-                axis_str = axis_elem.get("xyz", "0 0 1")
-                axis_list = [float(x) for x in axis_str.split()]
-            else:
-                axis_list = [0, 0, 1]
-            
-            # 対応するjointの更新
-            for joint in self.joints:
-                if joint.name == jname:
-                    joint.type = mapped_type
-                    joint.origin_init = torch.tensor(origin_list, dtype=torch.float32, device=self.device)
-                    joint.axis_init = torch.tensor(axis_list, dtype=torch.float32, device=self.device)
-                    # 初期状態のorigin, axisを更新
-                    joint.origin = joint.origin_init.clone()
-                    joint.axis = joint.axis_init.clone()
-                    break
+            if jname in self.joint_names:
+                idx = self.joint_names.index(jname)
+                jtype = joint_elem.get("type")
+                mapped_type = "revolute" if jtype == "revolute" else ("prismatic" if jtype == "prismatic" else jtype)
+                self.joint_types[idx] = mapped_type
+                # origin情報
+                origin_elem = joint_elem.find("origin")
+                if origin_elem is not None:
+                    origin_str = origin_elem.get("xyz", "0 0 0")
+                    origin_list = [float(x) for x in origin_str.split()]
+                else:
+                    origin_list = [0, 0, 0]
+                # axis情報
+                axis_elem = joint_elem.find("axis")
+                if axis_elem is not None:
+                    axis_str = axis_elem.get("xyz", "0 0 1")
+                    axis_list = [float(x) for x in axis_str.split()]
+                else:
+                    axis_list = [0, 0, 1]
+                # 各環境に同じ値を設定（タイル展開）
+                origin_tensor = torch.tensor(origin_list, dtype=torch.float32, device=device)
+                axis_tensor   = torch.tensor(axis_list, dtype=torch.float32, device=device)
+                self.joint_origin_init[:, idx, :] = origin_tensor.unsqueeze(0).expand(num_envs, -1)
+                self.joint_axis_init[:, idx, :] = axis_tensor.unsqueeze(0).expand(num_envs, -1)
+                # 初期状態の値としてコピー
+                self.joint_origin[:, idx, :] = self.joint_origin_init[:, idx, :]
+                self.joint_axis[:, idx, :] = self.joint_axis_init[:, idx, :]
 
-#     def update_state(self, dof_pos_list, rigid_body_state):
-#         """
-#         1. 各jointのdof_posおよび各tendon内のviaのposを更新
-#         2. 各jointについて、dof_posとorigin_init, axis_initから計算した回転行列を用いてorigin, axisを更新
-#            ※revoluteの場合は回転行列 prismaticの場合は平行移動として更新
-#         rigid_body_state:
-#             GPU上のtensor (num_rigid_bodies x 3) で、各剛体の位置情報が格納されているものとする
-#         """
-#         # 各ジョイントの状態更新
-#         #[todo]
+        # バッチ用のワイヤ（via）の初期化
+        # tendon_via_pos はリスト（長さ：num_tendons）、各要素は shape=(num_envs, num_vias, 3) のテンソル
+        self.tendon_via_pos = []
+        # tendon_via_indices は後から gym など外部から設定するためのリスト（各viaに対応する剛体のインデックス）
+        self.tendon_via_indices = []
+        for via_names in self.tendon_via_names:
+            num_vias = len(via_names)
+            self.tendon_via_pos.append(torch.zeros((num_envs, num_vias, 3), dtype=torch.float32, device=device))
+            self.tendon_via_indices.append([None] * num_vias)
 
-#         # 各テンドンのviaの位置更新
-#         for tendon in self.tendons:
-#             for via in tendon.vias:
-#                 parts = via.name.split('_')
-#                 try:
-#                     idx = int(parts[2])
-#                 except:
-#                     idx = 0
-#                 via.via_rigid_body_indices = [idx]
-#                 via.pos = rigid_body_state[idx]
+        self.tendon_lengths = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
+        self.tendon_jacobian = torch.zeros((num_envs, self.num_joints, self.num_tendons), dtype=torch.float32, device=device)
 
-#     def rotation_matrix(self, axis, theta):
-#         """
-#         Rodriguesの回転公式に基づき、与えられた軸(axis)周りの回転角(theta)の回転行列を計算する。
-#         """
-#         axis = axis / (torch.norm(axis) + 1e-6)
-#         K = torch.tensor([[0, -axis[2], axis[1]],
-#                           [axis[2], 0, -axis[0]],
-#                           [-axis[1], axis[0], 0]], dtype=torch.float32, device=self.device)
-#         I = torch.eye(3, device=self.device)
-#         R = I + torch.sin(theta)*K + (1 - torch.cos(theta))*(K @ K)
-#         return R
+    def rotation_matrix(self, axis, theta):
+        """
+        バッチ対応の Rodrigues 回転公式
+        Args:
+            axis: (num_envs, 1, 3) tensor (正規化済みであること)
+            theta: (num_envs, 1) tensor
+        Returns:
+            R: (num_envs, 3, 3) 回転行列
+        """
+        # 正規化
+        axis = axis / (axis.norm(dim=-1, keepdim=True) + 1e-6)
+        # バッチ用のクロス行列 K を作成
+        a_x = axis[..., 0].unsqueeze(-1).unsqueeze(-1)
+        a_y = axis[..., 1].unsqueeze(-1).unsqueeze(-1)
+        a_z = axis[..., 2].unsqueeze(-1).unsqueeze(-1)
+        zero = torch.zeros_like(a_x)
+        K = torch.cat([
+            torch.cat([zero, -a_z, a_y], dim=-1),
+            torch.cat([a_z, zero, -a_x], dim=-1),
+            torch.cat([-a_y, a_x, zero], dim=-1)
+        ], dim=-2)  # shape: (num_envs, 1, 3, 3)
+        I = torch.eye(3, device=self.device).unsqueeze(0).unsqueeze(0)
+        theta = theta.unsqueeze(-1).unsqueeze(-1)  # shape: (num_envs, 1, 1, 1)
+        R = I + torch.sin(theta)*K + (1 - torch.cos(theta))*(K @ K)
+        # squeeze次元1（ジョイント単位の1）→ shape: (num_envs, 3, 3)
+        return R.squeeze(1)
 
-#     def get_tendon_len(self):
-#         """
-#         各tendonについて、各viaの連続する2点間のユークリッド距離の和を計算し、tendon.lに格納する。
-#         戻り値は各テンドンの長さを格納したGPU tensorのリスト。
-#         """
-#         tendon_lengths = []
-#         for tendon in self.tendons:
-#             length = torch.tensor(0.0, dtype=torch.float32, device=self.device)
-#             vias = tendon.vias
-#             for i in range(len(vias)-1):
-#                 diff = vias[i+1].pos - vias[i].pos
-#                 length = length + torch.norm(diff)
-#             tendon.l = length
-#             tendon_lengths.append(length)
-#         return tendon_lengths
+    def update_state(self, dof_pos_tensor, rigid_body_state):
+        """
+        各環境分の関節角度・変位および剛体状態から、ジョイントとワイヤ内のviaの位置を一括更新する
+        Args:
+            dof_pos_tensor: (num_envs, num_joints) の tensor。各環境の各ジョイントの値
+            rigid_body_state: (num_envs, num_rigid_bodies, 3) の tensor。各環境の剛体位置
+        """
+        self.joint_dof_pos = dof_pos_tensor
+        # [todo] ジョイント更新（各ジョイントごとにバッチ処理）
+
+        # ワイヤ内の各viaについて、外部から設定済みの rigid_body_state のインデックスを使って位置を更新
+        for t, via_names in enumerate(self.tendon_via_names):
+            num_vias = len(via_names)
+            for i in range(num_vias):
+                idx = self.tendon_via_indices[t][i]
+                # 例: rigid_body_state[:, idx, :] を各環境のvia位置に設定
+                self.tendon_via_pos[t][:, i, :] = rigid_body_state[:, idx, 0:3]
+
+        self.calc_tendon_len()
+
+
+    def calc_tendon_len(self):
+        """
+        各tendonについて、各viaの連続する2点間のユークリッド距離の和を計算し、self.tendon_lengthsに格納する。
+        """
+        for t in range(self.num_tendons):
+            via_pos = self.tendon_via_pos[t]
+            via_pos_diff = via_pos[:, 1:, :] - via_pos[:, :-1, :]
+            via_pos_diff_norm = torch.norm(via_pos_diff, dim=-1)
+            self.tendon_lengths[:, t] = torch.sum(via_pos_diff_norm, dim=-1)
 
 #     def get_tendon_jacobian(self):
 #         """
 #         tendon_jacobianは shape=(num_joints, num_tendons) の行列とする。
-#         各ジョイントとテンドンの組に対し、jointの種類に応じたmoment armを各via対について合計し、
+#         各ジョイントとワイヤの組に対し、jointの種類に応じたmoment armを各via対について合計し、
 #         tendon_jacobian[i, j]に設定する。
 #         """
 #         num_joints = len(self.joints)

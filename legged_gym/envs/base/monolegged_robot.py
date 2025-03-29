@@ -113,6 +113,9 @@ class MonoLeggedRobot(BaseTask):
         actions_delayed_clipped = torch.clip(actions_delayed, -clip_actions, clip_actions).to(self.device)
         self.actions = torch.clip(actions[:], -clip_actions, clip_actions).to(self.device)
 
+        #TendonRobotModelの更新
+        self.tendon_robot_model.update_state(self.dof_pos, self.rigid_body_states)
+
         # step physics and render each frame
         self.render()
         for _ in range(self.cfg.control.decimation):
@@ -182,7 +185,7 @@ class MonoLeggedRobot(BaseTask):
     @property
     def rigid_body_states(self):
         if self._rigid_body_state is None:
-            sim_rigid_body_state = self.gym.acquire_rigid_body_state_tensor(self.sim)
+            sim_rigid_body_state = self.gym.acquire_rigid_body_state_tensor(self.sim) #position([0:3]), rotation([3:7]), linear velocity([7:10]), and angular velocity([10:13]).
             self.gym.refresh_rigid_body_state_tensor(self.sim)
             rigid_body_state = gymtorch.wrap_tensor(sim_rigid_body_state)
             self._rigid_body_state = rigid_body_state.view(self.num_envs, -1, 13)
@@ -920,7 +923,6 @@ class MonoLeggedRobot(BaseTask):
         env_upper = gymapi.Vec3(0., 0., 0.)
         self.actor_handles = []
         self.envs = []
-        self.tendon_robot_models = []
         for i in range(self.num_envs):
             # create env instance
             env_handle = self.gym.create_env(self.sim, env_lower, env_upper, int(np.sqrt(self.num_envs)))
@@ -939,11 +941,6 @@ class MonoLeggedRobot(BaseTask):
             self.envs.append(env_handle)
             self.actor_handles.append(actor_handle)
 
-            # 各envごとにTendonRobotModelのインスタンスを生成して初期化 
-            yaml_path = self.cfg.asset.tendon_config_file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR)
-            tendon_model = TendonRobotModel(yaml_path, asset_path, self.device)
-            self.tendon_robot_models.append(tendon_model)
-
         self.feet_indices = torch.zeros(len(feet_names), dtype=torch.long, device=self.device, requires_grad=False)
         for i in range(len(feet_names)):
             self.feet_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], feet_names[i])
@@ -956,6 +953,15 @@ class MonoLeggedRobot(BaseTask):
         for i in range(len(termination_contact_names)):
             self.termination_contact_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], termination_contact_names[i])
         # print(termination_contact_names)
+
+        #TendonRobotModelのインスタンスを生成して初期化 
+        yaml_path = self.cfg.asset.tendon_config_file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR)
+        self.tendon_robot_model = TendonRobotModel(yaml_path, asset_path, self.num_envs, self.device)
+        # 各tendonのviaのrigid_body_indicesを設定
+        for t in range(self.tendon_robot_model.num_tendons):
+            for v in range(len(self.tendon_robot_model.tendon_via_names[t])):
+                via_name = self.tendon_robot_model.tendon_via_names[t][v]
+                self.tendon_robot_model.tendon_via_indices[t][v] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], via_name)
 
     def _get_env_origins(self):
         """ Sets environment origins. On rough terrain the origins are defined by the terrain platforms.
