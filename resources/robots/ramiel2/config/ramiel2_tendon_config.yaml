@@ -1,0 +1,38 @@
+ModelName: "ramiel2"
+JointList: ["roll", "pitch", "slide"]
+TendonList:
+  - TendonId: 0
+    ViaPoints:
+      - ParentLink: "point_base_0_0"
+        
+      - ParentLink: "point_leg_0_1"
+
+  - TendonId: 1
+    ViaPoints:
+      - ParentLink: "point_base_1_0"
+        
+      - ParentLink: "point_leg_1_1"
+
+  - TendonId: 2
+    ViaPoints:
+      - ParentLink: "point_base_2_0"
+        
+      - ParentLink: "point_leg_2_1"
+
+  - TendonId: 3
+    ViaPoints:
+      - ParentLink: "point_base_3_0"
+        
+      - ParentLink: "point_leg_3_1"
+
+  - TendonId: 4
+    ViaPoints:
+      - ParentLink: "point_base_4_0"
+        
+      - ParentLink: "point_leg_4_1"
+
+  - TendonId: 5
+    ViaPoints:
+      - ParentLink: "point_base_5_0"
+        
+      - ParentLink: "point_leg_5_1"

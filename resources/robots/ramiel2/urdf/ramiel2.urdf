@@ -198,5 +198,557 @@
       effort="1000"
       velocity="20" />
   </joint>
+ <link
+    name="point_leg_0_1">
+    <inertial>
+      <origin
+        xyz="2.08166817117217E-17 3.46944695195361E-18 0"
+        rpy="0 0 0" />
+      <mass
+        value="3.41805280710569E-05" />
+      <inertia
+        ixx="5.46888449136911E-11"
+        ixy="0"
+        ixz="0"
+        iyy="5.46888449136911E-11"
+        iyz="0"
+        izz="5.46888449136911E-11" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/point_leg_0_1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+  </link>
+  <joint
+    name="point_leg_0_1_dummy"
+    type="fixed"
+    dont_collapse="true">
+    <origin
+      xyz="0.024 0 0.52"
+      rpy="0 0 0" />
+    <parent
+      link="leg_link" />
+    <child
+      link="point_leg_0_1" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="point_leg_1_1">
+    <inertial>
+      <origin
+        xyz="4.3368E-16 -1.9429E-16 0"
+        rpy="0 0 0" />
+      <mass
+        value="3.4181E-05" />
+      <inertia
+        ixx="5.4689E-11"
+        ixy="0"
+        ixz="0"
+        iyy="5.4689E-11"
+        iyz="0"
+        izz="5.4689E-11" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/point_leg_1_1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+  </link>
+  <joint
+    name="point_leg_1_1_dummy"
+    type="fixed"
+    dont_collapse="true">
+    <origin
+      xyz="-0.012 0.020785 0.52"
+      rpy="0 0 0" />
+    <parent
+      link="leg_link" />
+    <child
+      link="point_leg_1_1" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+ <link
+    name="point_leg_2_1">
+    <inertial>
+      <origin
+        xyz="-4.38885039422132E-16 7.28583859910259E-17 0"
+        rpy="0 0 0" />
+      <mass
+        value="3.41805280710569E-05" />
+      <inertia
+        ixx="5.46888449136911E-11"
+        ixy="0"
+        ixz="0"
+        iyy="5.46888449136911E-11"
+        iyz="0"
+        izz="5.46888449136911E-11" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/point_leg_2_1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+  </link>
+  <joint
+    name="point_leg_2_1_dummy"
+    type="fixed"
+    dont_collapse="true">
+    <origin
+      xyz="-0.012 -0.0207846096908265 0.52"
+      rpy="0 0 0" />
+    <parent
+      link="leg_link" />
+    <child
+      link="point_leg_2_1" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="point_leg_3_1">
+    <inertial>
+      <origin
+        xyz="2.08166817117217E-17 3.46944695195361E-18 0"
+        rpy="0 0 0" />
+      <mass
+        value="3.41805280710569E-05" />
+      <inertia
+        ixx="5.46888449136911E-11"
+        ixy="0"
+        ixz="0"
+        iyy="5.46888449136911E-11"
+        iyz="0"
+        izz="5.46888449136911E-11" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/point_leg_3_1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+  </link>
+  <joint
+    name="point_leg_3_1_dummy"
+    type="fixed"
+    dont_collapse="true">
+    <origin
+      xyz="0.024 0 -0.52"
+      rpy="0 0 0" />
+    <parent
+      link="leg_link" />
+    <child
+      link="point_leg_3_1" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="point_leg_4_1">
+    <inertial>
+      <origin
+        xyz="-3.59087759527199E-16 6.93889390390723E-18 0"
+        rpy="0 0 0" />
+      <mass
+        value="3.41805280710569E-05" />
+      <inertia
+        ixx="5.46888449136911E-11"
+        ixy="0"
+        ixz="0"
+        iyy="5.46888449136911E-11"
+        iyz="0"
+        izz="5.46888449136911E-11" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/point_leg_4_1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+  </link>
+  <joint
+    name="point_leg_4_1_dummy"
+    type="fixed"
+    dont_collapse="true">
+    <origin
+      xyz="-0.0120000000000001 0.0207846096908265 -0.52"
+      rpy="0 0 0" />
+    <parent
+      link="leg_link" />
+    <child
+      link="point_leg_4_1" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="point_leg_5_1">
+    <inertial>
+      <origin
+        xyz="-2.02962646689286E-16 -3.46944695195361E-18 0"
+        rpy="0 0 0" />
+      <mass
+        value="3.41805280710569E-05" />
+      <inertia
+        ixx="5.46888449136911E-11"
+        ixy="0"
+        ixz="0"
+        iyy="5.46888449136911E-11"
+        iyz="0"
+        izz="5.46888449136911E-11" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/point_leg_5_1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+  </link>
+  <joint
+    name="point_leg_5_1_dummy"
+    type="fixed"
+    dont_collapse="true">
+    <origin
+      xyz="-0.012 -0.020785 -0.52"
+      rpy="0 0 0" />
+    <parent
+      link="leg_link" />
+    <child
+      link="point_leg_5_1" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="point_base_0_0">
+    <inertial>
+      <origin
+        xyz="0 -8.59044900932015E-18 3.46944695195361E-18"
+        rpy="0 0 0" />
+      <mass
+        value="3.41805280710569E-05" />
+      <inertia
+        ixx="5.46888449136911E-11"
+        ixy="0"
+        ixz="0"
+        iyy="5.46888449136911E-11"
+        iyz="0"
+        izz="5.46888449136911E-11" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/point_base_0_0.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+  </link>
+  <joint
+    name="point_base_0_0_dummy"
+    type="fixed"
+    dont_collapse="true">
+    <origin
+      xyz="0.32 0 0.03"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="point_base_0_0" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="point_base_1_0">
+    <inertial>
+      <origin
+        xyz="1.38777878078145E-16 0 1.38777878078145E-17"
+        rpy="0 0 0" />
+      <mass
+        value="3.41805280710569E-05" />
+      <inertia
+        ixx="5.46888449136911E-11"
+        ixy="0"
+        ixz="0"
+        iyy="5.46888449136911E-11"
+        iyz="0"
+        izz="5.46888449136911E-11" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/point_base_1_0.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+  </link>
+  <joint
+    name="point_base_1_0_dummy"
+    type="fixed"
+    dont_collapse="true">
+    <origin
+      xyz="-0.16 0.27713 0.03"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="point_base_1_0" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="point_base_2_0">
+    <inertial>
+      <origin
+        xyz="-4.16333634234434E-16 -5.55111512312578E-17 1.73472347597681E-17"
+        rpy="0 0 0" />
+      <mass
+        value="3.41805280710569E-05" />
+      <inertia
+        ixx="5.46888449136911E-11"
+        ixy="0"
+        ixz="0"
+        iyy="5.46888449136911E-11"
+        iyz="0"
+        izz="5.46888449136911E-11" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/point_base_2_0.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+  </link>
+  <joint
+    name="point_base_2_0_dummy"
+    type="fixed"
+    dont_collapse="true">
+    <origin
+      xyz="-0.16 -0.27713 0.03"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="point_base_2_0" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="point_base_3_0">
+    <inertial>
+      <origin
+        xyz="0 -2.3039615008817E-18 3.46944695195361E-18"
+        rpy="0 0 0" />
+      <mass
+        value="3.41805280710569E-05" />
+      <inertia
+        ixx="5.46888449136911E-11"
+        ixy="0"
+        ixz="0"
+        iyy="5.46888449136911E-11"
+        iyz="0"
+        izz="5.46888449136911E-11" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/point_base_3_0.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+  </link>
+  <joint
+    name="point_base_3_0_dummy"
+    type="fixed"
+    dont_collapse="true">
+    <origin
+      xyz="0.32 0 -0.0299999999999999"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="point_base_3_0" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="point_base_4_0">
+    <inertial>
+      <origin
+        xyz="1.94289029309402E-16 0 2.77555756156289E-17"
+        rpy="0 0 0" />
+      <mass
+        value="3.41805280710569E-05" />
+      <inertia
+        ixx="5.46888449136911E-11"
+        ixy="0"
+        ixz="0"
+        iyy="5.46888449136911E-11"
+        iyz="0"
+        izz="5.46888449136911E-11" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/point_base_4_0.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+  </link>
+  <joint
+    name="point_base_4_0_dummy"
+    type="fixed"
+    dont_collapse="true">
+    <origin
+      xyz="-0.16 0.27713 -0.03"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="point_base_4_0" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="point_base_5_0">
+    <inertial>
+      <origin
+        xyz="8.32667268468867E-17 -5.55111512312578E-17 3.12250225675825E-17"
+        rpy="0 0 0" />
+      <mass
+        value="3.41805280710569E-05" />
+      <inertia
+        ixx="5.46888449136911E-11"
+        ixy="0"
+        ixz="0"
+        iyy="5.46888449136911E-11"
+        iyz="0"
+        izz="5.46888449136911E-11" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/point_base_5_0.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+  </link>
+  <joint
+    name="point_base_5_0_dummy"
+    type="fixed"
+    dont_collapse="true">
+    <origin
+      xyz="-0.16 -0.27713 -0.03"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="point_base_5_0" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
 
+  <link name="env_link">
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="0.0001"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <joint name="joint_floating" type="floating">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="env_link"/>
+    <child link="base_link"/>
+  </joint>
 </robot>

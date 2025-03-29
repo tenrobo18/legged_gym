@@ -48,6 +48,8 @@ from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi, torch_rand_sqrt_fl
 from legged_gym.utils.helpers import class_to_dict
 from .monolegged_robot_config import MonoLeggedRobotCfg
 
+from .tendon_model_gym import TendonRobotModel
+
 class MonoLeggedRobot(BaseTask):
     def __init__(self, cfg: MonoLeggedRobotCfg, sim_params, physics_engine, sim_device, headless):
         """ Parses the provided config file,
@@ -918,6 +920,7 @@ class MonoLeggedRobot(BaseTask):
         env_upper = gymapi.Vec3(0., 0., 0.)
         self.actor_handles = []
         self.envs = []
+        self.tendon_robot_models = []
         for i in range(self.num_envs):
             # create env instance
             env_handle = self.gym.create_env(self.sim, env_lower, env_upper, int(np.sqrt(self.num_envs)))
@@ -935,6 +938,11 @@ class MonoLeggedRobot(BaseTask):
             self.gym.set_actor_rigid_body_properties(env_handle, actor_handle, body_props, recomputeInertia=True)
             self.envs.append(env_handle)
             self.actor_handles.append(actor_handle)
+
+            # 各envごとにTendonRobotModelのインスタンスを生成して初期化 
+            yaml_path = self.cfg.asset.tendon_config_file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR)
+            tendon_model = TendonRobotModel(yaml_path, asset_path, self.device)
+            self.tendon_robot_models.append(tendon_model)
 
         self.feet_indices = torch.zeros(len(feet_names), dtype=torch.long, device=self.device, requires_grad=False)
         for i in range(len(feet_names)):

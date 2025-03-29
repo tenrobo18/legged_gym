@@ -102,6 +102,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
 
     class asset( MonoLeggedRobotCfg.asset ):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/ramiel2/urdf/ramiel2.urdf'
+        tendon_config_file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/ramiel2/config/ramiel2_tendon_config.yaml'
         name = "ramiel2"
         foot_name = 'leg_link'
         terminate_after_contacts_on = ['base_link']
