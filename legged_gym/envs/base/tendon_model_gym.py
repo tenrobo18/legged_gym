@@ -24,11 +24,12 @@ class TendonRobotModel:
         self.num_tendons = len(tendon_list)
         # 各ワイヤについて、viaの名前リストを保持
         self.tendon_via_names = []
+        self.affected_joints = []
         for tendon_info in tendon_list:
             via_points = tendon_info["ViaPoints"]
             via_names = [via_info["ParentLink"] for via_info in via_points]
             self.tendon_via_names.append(via_names)
-        
+            self.affected_joints.append(tendon_info["AffectedJoints"])
         # バッチ用のジョイントパラメータを初期化
         # 各ジョイントは shape=(num_envs, 3) のテンソルで管理
         self.joint_origin_init = torch.zeros((num_envs, self.num_joints, 3), dtype=torch.float32, device=device)
@@ -133,7 +134,9 @@ class TendonRobotModel:
                 self.tendon_via_pos[t][:, i, :] = rigid_body_state[:, idx, 0:3]
 
         self.calc_tendon_len()
+        self.calc_tendon_jacobian()
 
+        print("jacobian: ", self.tendon_jacobian)
 
     def calc_tendon_len(self):
         """
@@ -145,45 +148,60 @@ class TendonRobotModel:
             via_pos_diff_norm = torch.norm(via_pos_diff, dim=-1)
             self.tendon_lengths[:, t] = torch.sum(via_pos_diff_norm, dim=-1)
 
-#     def get_tendon_jacobian(self):
-#         """
-#         tendon_jacobianは shape=(num_joints, num_tendons) の行列とする。
-#         各ジョイントとワイヤの組に対し、jointの種類に応じたmoment armを各via対について合計し、
-#         tendon_jacobian[i, j]に設定する。
-#         """
-#         num_joints = len(self.joints)
-#         num_tendons = len(self.tendons)
-#         J = torch.zeros((num_joints, num_tendons), dtype=torch.float32, device=self.device)
-#         for i, joint in enumerate(self.joints):
-#             for j, tendon in enumerate(self.tendons):
-#                 moment_arm = torch.tensor(0.0, dtype=torch.float32, device=self.device)
-#                 vias = tendon.vias
-#                 for k in range(len(vias)-1):
-#                     p1 = vias[k].pos
-#                     p2 = vias[k+1].pos
-#                     segment = p2 - p1
-#                     if joint.type == "revolute":
-#                         d = self.line_line_signed_distance(joint.origin, joint.axis, p1, segment)
-#                         moment_arm = moment_arm + d
-#                     elif joint.type == "prismatic":
-#                         seg_norm = torch.norm(segment)
-#                         if seg_norm > 1e-6:
-#                             seg_unit = segment / seg_norm
-#                             moment_arm = moment_arm + torch.dot(seg_unit, joint.axis / (torch.norm(joint.axis)+1e-6))
-#                 J[i, j] = moment_arm
-#         return J
+    def calc_tendon_jacobian(self):
+        """
+        Batched tendon jacobian の計算  
+        各ジョイントとテンドンの組に対し、各via対からmoment armを計算し、環境ごとに合計する。
+        """
+        J = torch.zeros((self.num_envs, self.num_joints, self.num_tendons), dtype=torch.float32, device=self.device)
+        
+        for i in range(self.num_joints):
+            joint_origin = self.joint_origin[:, i, :]
+            joint_axis = self.joint_axis[:, i, :]
+            for j in range(self.num_tendons):
+                # i番目のjointがj番目のtendonに影響を及ぼす場合、moment armを計算
+                if self.joint_names[i] in self.affected_joints[j]:
+                    via_pos = self.tendon_via_pos[j]
+                    # 隣接するvia間のベクトル
+                    via_pos_diff = via_pos[:, 1:, :] - via_pos[:, :-1, :]
+                    via_pos_diff_unit = via_pos_diff / (torch.norm(via_pos_diff, dim=-1, keepdim=True) + 1e-6)
+                    joint_axis_unit = joint_axis / (torch.norm(joint_axis, dim=-1, keepdim=True) + 1e-6)
+                    moment_arm = torch.zeros((self.num_envs), dtype=torch.float32, device=self.device)
+                    if self.joint_types[i] == "revolute":
+                        # 回転関節の場合：回転軸とワイヤ直線間の符号付き最短距離を各セグメントで計算して合計
+                        for k in range(via_pos_diff.shape[1]):
+                            moment_arm += self.line_line_signed_distance(joint_origin, joint_axis_unit,
+                                                                        via_pos[:, k, :],
+                                                                        via_pos_diff_unit[:, k, :])
+                    elif self.joint_types[i] == "prismatic":
+                        # 直動関節の場合：関節軸とワイヤ直線単位ベクトルの内積を各セグメントで計算して合計
+                        moment_arm = torch.sum(torch.sum(joint_axis_unit * via_pos_diff_unit, dim=-1), dim=-1)
+                    J[:, i, j] = moment_arm
+                else:
+                    J[:, i, j] = 0.0
+        self.tendon_jacobian = J
 
-#     def line_line_signed_distance(self, p0, d0, p1, d1):
-#         """
-#         2直線間の符号付き最短距離を計算する補助関数
-#         直線1: p0 + t*d0
-#         直線2: p1 + s*d1
-#         """
-#         d1_unit = d1 / (torch.norm(d1) + 1e-6)
-#         cross = torch.cross(d0, d1_unit)
-#         cross_norm = torch.norm(cross) + 1e-6
-#         distance = torch.dot((p1 - p0), cross) / cross_norm
-#         return distance
+        
+
+    def line_line_signed_distance(self, p0, d0, p1, d1):
+        """
+        2直線間の符号付き最短距離の計算
+        Args:
+            p0: (batch_size, num_pairs, 3) – 1本目の直線上の点
+            d0: (batch_size, num_pairs, 3) – 1本目の直線の方向ベクトル
+            p1: (batch_size, num_pairs, 3) – 2本目の直線上の点
+            d1: (batch_size, num_pairs, 3) – 2本目の直線の方向ベクトル
+        Returns:
+            距離: (batch_size, num_pairs) のテンソル
+        """
+        # 交差ベクトル
+        cross = torch.cross(d0, d1, dim=-1)  # (batch_size, num_pairs, 3)
+        cross_norm = torch.norm(cross, dim=-1) + 1e-6  # (batch_size, num_pairs)
+        diff = p1 - p0  # (batch_size, num_pairs, 3)
+        # diff と cross の内積 / ||cross||
+        distance = (diff * cross).sum(dim=-1) / cross_norm  # (batch_size, num_pairs)
+        return distance
+
 
 # # ============================================
 # # 以下は利用例です（実際のyaml, urdfファイルパスおよびrigid_body_stateの設定が必要）

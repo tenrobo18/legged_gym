@@ -7,11 +7,15 @@ TendonList:
         
       - ParentLink: "point_leg_0_1"
 
+    AffectedJoints: ["roll", "pitch", "slide"]
+  
   - TendonId: 1
     ViaPoints:
       - ParentLink: "point_base_1_0"
         
       - ParentLink: "point_leg_1_1"
+
+    AffectedJoints: ["roll", "pitch", "slide"]
 
   - TendonId: 2
     ViaPoints:
@@ -19,11 +23,15 @@ TendonList:
         
       - ParentLink: "point_leg_2_1"
 
+    AffectedJoints: ["roll", "pitch", "slide"]
+
   - TendonId: 3
     ViaPoints:
       - ParentLink: "point_base_3_0"
         
       - ParentLink: "point_leg_3_1"
+
+    AffectedJoints: ["roll", "pitch", "slide"]
 
   - TendonId: 4
     ViaPoints:
@@ -31,8 +39,12 @@ TendonList:
         
       - ParentLink: "point_leg_4_1"
 
+    AffectedJoints: ["roll", "pitch", "slide"]      
+
   - TendonId: 5
     ViaPoints:
       - ParentLink: "point_base_5_0"
         
       - ParentLink: "point_leg_5_1"
+
+    AffectedJoints: ["roll", "pitch", "slide"]
