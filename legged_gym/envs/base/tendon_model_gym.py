@@ -31,8 +31,9 @@ class TendonRobotModel:
         for tendon_info in tendon_list:
             via_points = tendon_info["ViaPoints"]
             via_names = [via_info["ParentLink"] for via_info in via_points]
+            affected_joints = [via_info["AffectedJoints"] for via_info in via_points]
             self.tendon_via_names.append(via_names)
-            self.affected_joints.append(tendon_info["AffectedJoints"])
+            self.affected_joints.append(affected_joints)
         # バッチ用のジョイントパラメータを初期化
         # 各ジョイントは shape=(num_envs, 3) のテンソルで管理
         self.joint_origin_init = torch.zeros((num_envs, self.num_joints, 3), dtype=torch.float32, device=device)
@@ -265,29 +266,26 @@ class TendonRobotModel:
             joint_origin = self.joint_origin[:, i, :]
             joint_axis = self.joint_axis[:, i, :]
             for j in range(self.num_tendons):
-                # i番目のjointがj番目のtendonに影響を及ぼす場合、moment armを計算
-                if self.joint_names[i] in self.affected_joints[j]:
-                    via_pos = self.tendon_via_pos[j]
-                    # 隣接するvia間のベクトル
-                    via_pos_diff = via_pos[:, 1:, :] - via_pos[:, :-1, :]
-                    via_pos_diff_unit = via_pos_diff / (torch.norm(via_pos_diff, dim=-1, keepdim=True) + 1e-6)
-                    joint_axis_unit = joint_axis / (torch.norm(joint_axis, dim=-1, keepdim=True) + 1e-6)
-                    moment_arm = torch.zeros((self.num_envs), dtype=torch.float32, device=self.device)
-                    if self.joint_types[i] == "revolute":
-                        # 回転関節の場合：回転軸とワイヤ直線間の符号付き最短距離を各セグメントで計算して合計
-                        # 符号付き最短距離は、関節が正方向に回転するときにワイヤが伸びる場合は正, 縮む場合は負
-                        for k in range(via_pos_diff.shape[1]):
+                via_pos = self.tendon_via_pos[j]
+                # 隣接するvia間のベクトル
+                via_pos_diff = via_pos[:, 1:, :] - via_pos[:, :-1, :]
+                via_pos_diff_unit = via_pos_diff / (torch.norm(via_pos_diff, dim=-1, keepdim=True) + 1e-6)
+                joint_axis_unit = joint_axis / (torch.norm(joint_axis, dim=-1, keepdim=True) + 1e-6)
+                moment_arm = torch.zeros((self.num_envs), dtype=torch.float32, device=self.device)
+                for k in range(via_pos_diff.shape[1]):
+                    if self.joint_names[i] in self.affected_joints[j][k]:
+                        if self.joint_types[i] == "revolute":
+                            # 回転関節の場合：回転軸とワイヤ直線間の符号付き最短距離を各セグメントで計算して合計
+                            # 符号付き最短距離は、関節が正方向に回転するときにワイヤが伸びる場合は正, 縮む場合は負
                             moment_arm += - self.line_line_signed_distance(joint_origin, joint_axis_unit,
                                                                         via_pos[:, k, :],
                                                                         via_pos_diff_unit[:, k, :])
-                    elif self.joint_types[i] == "prismatic":
-                        # 直動関節の場合：関節軸とワイヤ直線単位ベクトルの内積を各セグメントで計算して合計
-                        for k in range(via_pos_diff.shape[1]):
+                        elif self.joint_types[i] == "prismatic":
+                            # 直動関節の場合：関節軸とワイヤ直線単位ベクトルの内積を各セグメントで計算して合計
                             moment_arm += torch.sum(joint_axis_unit * via_pos_diff_unit[:, k, :], dim=1)
-                    J[:, i, j] = moment_arm
-                else:
-                    J[:, i, j] = 0.0
+                J[:, i, j] = moment_arm
         self.tendon_jacobian = J
+        print("J: ", J)
 
     def line_line_signed_distance(self, p0, d0, p1, d1):
         """
