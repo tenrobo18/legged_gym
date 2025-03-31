@@ -2,6 +2,9 @@ import torch
 import yaml
 import xml.etree.ElementTree as ET
 
+from isaacgym.torch_utils import *
+from isaacgym import gymtorch, gymapi, gymutil
+
 class TendonRobotModel:
     def __init__(self, yaml_path, urdf_path, num_envs, device):
         """
@@ -42,6 +45,11 @@ class TendonRobotModel:
         # 各ジョイントの種類（"revolute" か "prismatic"/"slide"）
         self.joint_types = ["revolute"] * self.num_joints  # 仮の初期値
         
+        # 各ジョイントの親リンク名、子リンク名、および親ジョイントのインデックスを保持するリスト
+        self.joint_parent_links = [None] * self.num_joints
+        self.joint_child_links  = [None] * self.num_joints
+        self.joint_parent_idx   = [-1] * self.num_joints  # -1ならベースリンク（親が存在しない）
+
         # URDFから各ジョイントのorigin, axis, typeを取得し上書きする
         tree = ET.parse(urdf_path)
         root = tree.getroot()
@@ -66,17 +74,48 @@ class TendonRobotModel:
                     axis_list = [float(x) for x in axis_str.split()]
                 else:
                     axis_list = [0, 0, 1]
+                # parent, child情報
+                parent_elem = joint_elem.find("parent")
+                parent_link = parent_elem.get("link") if parent_elem is not None else None
+                child_elem  = joint_elem.find("child")
+                child_link  = child_elem.get("link") if child_elem is not None else None
+                self.joint_parent_links[idx] = parent_link
+                self.joint_child_links[idx]  = child_link
+                
                 # 各環境に同じ値を設定（タイル展開）
                 origin_tensor = torch.tensor(origin_list, dtype=torch.float32, device=device)
                 axis_tensor   = torch.tensor(axis_list, dtype=torch.float32, device=device)
+                axis_tensor = axis_tensor / torch.norm(axis_tensor, dim=-1, keepdim=True) # 正規化
                 self.joint_origin_init[:, idx, :] = origin_tensor.unsqueeze(0).expand(num_envs, -1)
                 self.joint_axis_init[:, idx, :] = axis_tensor.unsqueeze(0).expand(num_envs, -1)
                 # 初期状態の値としてコピー
                 self.joint_origin[:, idx, :] = self.joint_origin_init[:, idx, :]
                 self.joint_axis[:, idx, :] = self.joint_axis_init[:, idx, :]
 
+         # 各ジョイントの親子関係の構築（parent_linkがどのジョイントのchild_linkに対応するかを調べる）
+        for i in range(self.num_joints):
+            parent_link = self.joint_parent_links[i]
+            if parent_link is None:
+                self.joint_parent_idx[i] = -1
+            else:
+                found = False
+                for j in range(self.num_joints):
+                    if self.joint_child_links[j] == parent_link:
+                        self.joint_parent_idx[i] = j
+                        found = True
+                        break
+                if not found:
+                    self.joint_parent_idx[i] = -1  # 親がベースリンクの場合
+
+        # 各関節の【局所】同時変換行列（親リンクと子リンク間の変換）を保持するテンソル (num_envs, num_joints, 4, 4)
+        self.t_joint = torch.eye(4, device=self.device).unsqueeze(0).unsqueeze(0).expand(
+            self.num_envs, self.num_joints, 4, 4).clone()
+        # 各関節の【グローバル】同時変換行列（ベースリンクと子リンク間の変換）を保持するテンソル (num_envs, num_joints, 4, 4)
+        self.t_global = torch.eye(4, device=self.device).unsqueeze(0).unsqueeze(0).expand(
+            self.num_envs, self.num_joints, 4, 4).clone()
+
         # バッチ用のワイヤ（via）の初期化
-        # tendon_via_pos はリスト（長さ：num_tendons）、各要素は shape=(num_envs, num_vias, 3) のテンソル
+        # tendon_via_pos はリスト（長さ：num_tendons）、各要素は shape=(num_envs, num_vias, 3) のテンソル. ベースリンク座標系
         self.tendon_via_pos = []
         # tendon_via_indices は後から gym など外部から設定するためのリスト（各viaに対応する剛体のインデックス）
         self.tendon_via_indices = []
@@ -88,18 +127,70 @@ class TendonRobotModel:
         self.tendon_lengths = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
         self.tendon_jacobian = torch.zeros((num_envs, self.num_joints, self.num_tendons), dtype=torch.float32, device=device)
 
+    def update_state(self, dof_pos_tensor, rigid_body_state, root_state):
+        """
+        各環境分の関節角度・変位および剛体状態から、ジョイントとワイヤ内のviaの位置を一括更新する
+        Args:
+            dof_pos_tensor: (num_envs, num_joints) の tensor。各環境の各ジョイントの値
+            rigid_body_state: (num_envs, num_rigid_bodies, 3) の tensor。各環境の剛体位置
+            root_state: (num_envs, 3) の tensor。各環境のベースリンクの状態. [0:3] は位置, [3:7] はクォータニオン, [7:10] は並進速度, [10:13] は角速度
+        """
+        #jointのaxisとoriginを更新
+        self.joint_dof_pos = dof_pos_tensor
+        self.calc_transration_matrix()
+        self.joint_origin = self.t_global[:, :, :3, 3]
+        for i in range(self.num_joints):
+            R_global = self.t_global[:, i, :3, :3]
+            axis_init = self.joint_axis_init[:, i, :].unsqueeze(-1)
+            axis_updated = torch.bmm(R_global, axis_init) 
+            self.joint_axis[:, i, :] = axis_updated.squeeze(-1)
+
+        # ワイヤ内の各viaについて、外部から設定済みの rigid_body_state のインデックスを使って位置を更新
+        for t, via_names in enumerate(self.tendon_via_names):
+            num_vias = len(via_names)
+            for i in range(num_vias):
+                idx = self.tendon_via_indices[t][i]
+                via_pos_global = rigid_body_state[:, idx, 0:3]
+                via_pos_base = quat_rotate_inverse(root_state[:, 3:7], via_pos_global - root_state[:, 0:3]) # ベースリンク座標系への変換
+                self.tendon_via_pos[t][:, i, :] = via_pos_base
+                
+        self.calc_tendon_len()
+        self.calc_tendon_jacobian()
+
+    def create_translation_matrix(self, t):
+        """
+        バッチ対応の平行移動行列を作成
+        Args:
+            t: (num_envs, 3) tensor – 平行移動ベクトル
+        Returns:
+            T: (num_envs, 4, 4) ホモジニアス変換行列
+        """
+        T = torch.eye(4, device=self.device).unsqueeze(0).expand(self.num_envs, -1, -1).clone()
+        T[:, :3, 3] = t
+        return T
+
+    def embed_rotation(self, R):
+        """
+        3x3の回転行列をホモジニアス変換行列に埋め込む
+        Args:
+            R: (num_envs, 3, 3) tensor – 回転行列
+        Returns:
+            T: (num_envs, 4, 4) ホモジニアス変換行列
+        """
+        T = torch.eye(4, device=self.device).unsqueeze(0).expand(self.num_envs, -1, -1).clone()
+        T[:, :3, :3] = R
+        return T
+
     def rotation_matrix(self, axis, theta):
         """
         バッチ対応の Rodrigues 回転公式
         Args:
-            axis: (num_envs, 1, 3) tensor (正規化済みであること)
+            axis: (num_envs, 1, 3) tensor 
             theta: (num_envs, 1) tensor
         Returns:
             R: (num_envs, 3, 3) 回転行列
         """
-        # 正規化
         axis = axis / (axis.norm(dim=-1, keepdim=True) + 1e-6)
-        # バッチ用のクロス行列 K を作成
         a_x = axis[..., 0].unsqueeze(-1).unsqueeze(-1)
         a_y = axis[..., 1].unsqueeze(-1).unsqueeze(-1)
         a_z = axis[..., 2].unsqueeze(-1).unsqueeze(-1)
@@ -108,35 +199,50 @@ class TendonRobotModel:
             torch.cat([zero, -a_z, a_y], dim=-1),
             torch.cat([a_z, zero, -a_x], dim=-1),
             torch.cat([-a_y, a_x, zero], dim=-1)
-        ], dim=-2)  # shape: (num_envs, 1, 3, 3)
+        ], dim=-2)
         I = torch.eye(3, device=self.device).unsqueeze(0).unsqueeze(0)
-        theta = theta.unsqueeze(-1).unsqueeze(-1)  # shape: (num_envs, 1, 1, 1)
-        R = I + torch.sin(theta)*K + (1 - torch.cos(theta))*(K @ K)
-        # squeeze次元1（ジョイント単位の1）→ shape: (num_envs, 3, 3)
+        theta = theta.unsqueeze(-1).unsqueeze(-1)
+        R = I + torch.sin(theta) * K + (1 - torch.cos(theta)) * (K @ K)
         return R.squeeze(1)
 
-    def update_state(self, dof_pos_tensor, rigid_body_state):
+    def calc_transration_matrix(self):
         """
-        各環境分の関節角度・変位および剛体状態から、ジョイントとワイヤ内のviaの位置を一括更新する
-        Args:
-            dof_pos_tensor: (num_envs, num_joints) の tensor。各環境の各ジョイントの値
-            rigid_body_state: (num_envs, num_rigid_bodies, 3) の tensor。各環境の剛体位置
+        各関節の【局所】, 【グローバル】同時変換行列を計算する
         """
-        self.joint_dof_pos = dof_pos_tensor
-        # [todo] ジョイント更新（各ジョイントごとにバッチ処理）
+        for i in range(self.num_joints):
+            # ① URDFで定義されたオフセットからの平行移動行列 T_origin
+            t_origin = self.joint_origin_init[:, i, :]  # (num_envs, 3)
+            T_origin = self.create_translation_matrix(t_origin)  # (num_envs, 4, 4)
 
-        # ワイヤ内の各viaについて、外部から設定済みの rigid_body_state のインデックスを使って位置を更新
-        for t, via_names in enumerate(self.tendon_via_names):
-            num_vias = len(via_names)
-            for i in range(num_vias):
-                idx = self.tendon_via_indices[t][i]
-                # 例: rigid_body_state[:, idx, :] を各環境のvia位置に設定
-                self.tendon_via_pos[t][:, i, :] = rigid_body_state[:, idx, 0:3]
+            # ② 関節運動による変換 T_motion
+            if self.joint_types[i] == "revolute":
+                # 回転の場合：joint_axis_init を軸、joint_dof_pos[:, i] を角度として回転行列を作成
+                axis = self.joint_axis_init[:, i, :].unsqueeze(1)  # (num_envs, 1, 3)
+                theta = self.joint_dof_pos[:, i].unsqueeze(1)        # (num_envs, 1)
+                R = self.rotation_matrix(axis, theta)                # (num_envs, 3, 3)
+                T_motion = self.embed_rotation(R)
+            elif self.joint_types[i] == "prismatic":
+                # 平行移動の場合：joint_axis_init に沿って joint_dof_pos[:, i] 分移動
+                d = self.joint_dof_pos[:, i].unsqueeze(-1)            # (num_envs, 1)
+                translation = self.joint_axis_init[:, i, :] * d       # (num_envs, 3)
+                T_motion = self.create_translation_matrix(translation)
+            else:
+                T_motion = torch.eye(4, device=self.device).unsqueeze(0).expand(self.num_envs, -1, -1)
 
-        self.calc_tendon_len()
-        self.calc_tendon_jacobian()
+            # ③ 局所変換行列 T_joint（親リンク→子リンク間の変換）
+            self.t_joint[:, i, :, :] = torch.bmm(T_origin, T_motion)
 
-        print("jacobian: ", self.tendon_jacobian)
+            # ④ グローバル変換行列 T_global（ベースリンク→子リンク間の変換）
+            # 再帰的に計算
+            reach_base = False
+            parent_idx = self.joint_parent_idx[i]
+            self.t_global[:, i, :, :] = self.t_joint[:, i, :, :]
+            while not reach_base:
+                if parent_idx == -1:
+                    reach_base = True
+                else:
+                    self.t_global[:, i, :, :] = torch.bmm(self.t_joint[:, parent_idx, :, :], self.t_global[:, i, :, :])
+                    parent_idx = self.joint_parent_idx[parent_idx]
 
     def calc_tendon_len(self):
         """
@@ -151,7 +257,7 @@ class TendonRobotModel:
     def calc_tendon_jacobian(self):
         """
         Batched tendon jacobian の計算  
-        各ジョイントとテンドンの組に対し、各via対からmoment armを計算し、環境ごとに合計する。
+        各jointとtendonの組に対し、各via対からmoment armを計算し、環境ごとに合計する。
         """
         J = torch.zeros((self.num_envs, self.num_joints, self.num_tendons), dtype=torch.float32, device=self.device)
         
@@ -169,19 +275,19 @@ class TendonRobotModel:
                     moment_arm = torch.zeros((self.num_envs), dtype=torch.float32, device=self.device)
                     if self.joint_types[i] == "revolute":
                         # 回転関節の場合：回転軸とワイヤ直線間の符号付き最短距離を各セグメントで計算して合計
+                        # 符号付き最短距離は、関節が正方向に回転するときにワイヤが伸びる場合は正, 縮む場合は負
                         for k in range(via_pos_diff.shape[1]):
-                            moment_arm += self.line_line_signed_distance(joint_origin, joint_axis_unit,
+                            moment_arm += - self.line_line_signed_distance(joint_origin, joint_axis_unit,
                                                                         via_pos[:, k, :],
                                                                         via_pos_diff_unit[:, k, :])
                     elif self.joint_types[i] == "prismatic":
                         # 直動関節の場合：関節軸とワイヤ直線単位ベクトルの内積を各セグメントで計算して合計
-                        moment_arm = torch.sum(torch.sum(joint_axis_unit * via_pos_diff_unit, dim=-1), dim=-1)
+                        for k in range(via_pos_diff.shape[1]):
+                            moment_arm += torch.sum(joint_axis_unit * via_pos_diff_unit[:, k, :], dim=1)
                     J[:, i, j] = moment_arm
                 else:
                     J[:, i, j] = 0.0
         self.tendon_jacobian = J
-
-        
 
     def line_line_signed_distance(self, p0, d0, p1, d1):
         """
@@ -201,31 +307,3 @@ class TendonRobotModel:
         # diff と cross の内積 / ||cross||
         distance = (diff * cross).sum(dim=-1) / cross_norm  # (batch_size, num_pairs)
         return distance
-
-
-# # ============================================
-# # 以下は利用例です（実際のyaml, urdfファイルパスおよびrigid_body_stateの設定が必要）
-# # ============================================
-# if __name__ == "__main__":
-#     model = TendonRobotModel()
-#     yaml_path = "params.yaml"
-#     urdf_path = "model.urdf"
-#     model.initialize(yaml_path, urdf_path)
-    
-#     # 関節角度/変位の更新例（3関節の場合）
-#     dof_pos_list = [0.5, -0.3, 0.2]
-#     # rigid_body_state例：各剛体の3次元位置（GPU上tensor）
-#     rigid_body_state = torch.tensor([[0,0,0],
-#                                      [1,0,0],
-#                                      [0,1,0],
-#                                      [0,0,1],
-#                                      [1,1,0],
-#                                      [0,1,1]], dtype=torch.float32, device=self.device)
-#     model.update_state(dof_pos_list, rigid_body_state)
-    
-#     tendon_lengths = model.get_tendon_len()
-#     tendon_jacobian = model.get_tendon_jacobian()
-    
-#     # 結果をCPUに戻して表示
-#     print("Tendon Lengths:", [l.item() for l in tendon_lengths])
-#     print("Tendon Jacobian:\n", tendon_jacobian.cpu().numpy())

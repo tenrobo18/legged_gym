@@ -114,7 +114,7 @@ class MonoLeggedRobot(BaseTask):
         self.actions = torch.clip(actions[:], -clip_actions, clip_actions).to(self.device)
 
         #TendonRobotModelの更新
-        self.tendon_robot_model.update_state(self.dof_pos, self.rigid_body_states)
+        self.tendon_robot_model.update_state(self.dof_pos, self.rigid_body_states, self.root_states)
 
         # step physics and render each frame
         self.render()
