@@ -108,6 +108,10 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         terminate_after_contacts_on = ['base_link']
         flip_visual_attachments = False
         self_collisions = 1 # 1 to disable, 0 to enable...bitwise filter
+        dof_damping = {'motor_0': 0., 'motor_1': 0., 'motor_2': 0., 'motor_3': 0., 'motor_4': 0., 'motor_5': 0., 'roll': 2., 'pitch': 2., 'slide': 35.}
+        dof_friction = {'motor_0': 0., 'motor_1': 0., 'motor_2': 0., 'motor_3': 0., 'motor_4': 0., 'motor_5': 0., 'roll': 0., 'pitch': 0., 'slide': 0.}
+        dof_armature = {'motor_0': 0., 'motor_1': 0., 'motor_2': 0., 'motor_3': 0., 'motor_4': 0., 'motor_5': 0., 'roll': 0.54811795, 'pitch': 0.54811064, 'slide': 9.51120847}
+        dof_kind = {'motor_0' : 'motor', 'motor_1' : 'motor', 'motor_2' : 'motor', 'motor_3' : 'motor', 'motor_4' : 'motor', 'motor_5' : 'motor', 'roll' : 'joint', 'pitch' : 'joint', 'slide' : 'joint'}
 
     class domain_rand:
         randomize_friction = True
@@ -147,8 +151,6 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
             torques = -3.0e-4
             dof_acc = -1.0e-4
             dof_vel = -1.0e-2
-            stand_still = 0.0
-            stand_still_contact = 0.0
             stumble = -3.0
             dof_pos_limits = -100.0
             dof_vel_limits = -0.1

@@ -393,22 +393,30 @@ class MonoLeggedRobot(BaseTask):
             self.dof_vel_limits = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
             self.torque_limits = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
             for i in range(len(props)):
-                self.dof_pos_limits[i, 0] = props["lower"][i].item()
-                self.dof_pos_limits[i, 1] = props["upper"][i].item()
+                if props["hasLimits"][i]:
+                    #dof_limits
+                    self.dof_pos_limits[i, 0] = props["lower"][i].item()
+                    self.dof_pos_limits[i, 1] = props["upper"][i].item()
+                    # soft dof limits
+                    m = (self.dof_pos_limits[i, 0] + self.dof_pos_limits[i, 1]) / 2
+                    r = self.dof_pos_limits[i, 1] - self.dof_pos_limits[i, 0]
+                    self.dof_pos_limits[i, 0] = m - 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
+                    self.dof_pos_limits[i, 1] = m + 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
                 self.dof_vel_limits[i] = props["velocity"][i].item()
                 self.torque_limits[i] = props["effort"][i].item()
-                # soft limits
-                m = (self.dof_pos_limits[i, 0] + self.dof_pos_limits[i, 1]) / 2
-                r = self.dof_pos_limits[i, 1] - self.dof_pos_limits[i, 0]
-                self.dof_pos_limits[i, 0] = m - 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
-                self.dof_pos_limits[i, 1] = m + 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
-        damping = torch.tensor([2., 2., 35.], dtype=torch.float32)
-        friction = torch.tensor([0.3, 0.3, 4.], dtype=torch.float32) 
-        armature = torch.tensor([0.54811795, 0.54811064, 9.51120847], dtype=torch.float32) 
-        for i in range(props.size):
-            props[i]["damping"] = damping[i]
-            props[i]["friction"] = friction[i]
-            props[i]["armature"] = armature[i]
+
+        for i in range(len(props)):
+            name = self.dof_names[i]
+            for dof_name in self.cfg.asset.dof_damping.keys():
+                if dof_name in name:
+                    props[i]["damping"] = self.cfg.asset.dof_damping[dof_name]
+                    props[i]["friction"] = self.cfg.asset.dof_friction[dof_name]
+                    props[i]["armature"] = self.cfg.asset.dof_armature[dof_name]
+                    found = True
+            if not found:
+                props[i]["damping"] = 0.
+                props[i]["friction"] = 0.
+                props[i]["armature"] = 0.
         
         # print("damping: ", props["damping"])
         # print("friction: ", props["friction"])
@@ -910,6 +918,18 @@ class MonoLeggedRobot(BaseTask):
         for name in self.cfg.asset.terminate_after_contacts_on:
             termination_contact_names.extend([s for s in body_names if name in s])
 
+        # 各dofのkindに応じてindexを取得
+        self.motor_idx = []
+        self.joint_idx = []
+        for i, name in enumerate(self.dof_names):
+            if self.cfg.asset.dof_kind[name] == "motor":
+                self.motor_idx.append(i)
+            elif self.cfg.asset.dof_kind[name] == "joint":
+                self.joint_idx.append(i)
+
+        print("motor_idx: ", self.motor_idx)
+        print("joint_idx: ", self.joint_idx)
+
         for name in self.dof_names:
             print(name + ": " + str(self.gym.find_asset_dof_index(robot_asset, name)))
 
@@ -1176,16 +1196,6 @@ class MonoLeggedRobot(BaseTask):
         # if norm(contact_force_xy) > 5*abs(contact_force_z), return 1
         return torch.any(torch.norm(self.contact_forces[:, self.feet_indices, :2], dim=2) >\
              5 *torch.abs(self.contact_forces[:, self.feet_indices, 2]), dim=1) * self.reward_curriculum_weight
-
-    def _reward_stand_still(self):
-        # Penalize motion at zero commands
-        # if norm(motion command) < 0.1, return sum(abs(dof_pos - default_dof_pos))
-        return torch.sum(torch.abs(self.dof_pos - self.default_dof_pos), dim=1) * (self.is_standing > 0.5).flatten()
-
-    def _reward_stand_still_contact(self):
-        # Penalize no foot contact at zero commands
-        contact = self.contact_forces[:, self.feet_indices, 2] > 1.
-        return torch.sum(~contact, dim=1) * (self.is_standing > 0.5).flatten()
 
     def _reward_feet_contact_forces(self):
         # penalize high contact forces
