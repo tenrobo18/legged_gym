@@ -285,7 +285,6 @@ class TendonRobotModel:
                             moment_arm += torch.sum(joint_axis_unit * via_pos_diff_unit[:, k, :], dim=1)
                 J[:, i, j] = moment_arm
         self.tendon_jacobian = J
-        print("J: ", J)
 
     def line_line_signed_distance(self, p0, d0, p1, d1):
         """

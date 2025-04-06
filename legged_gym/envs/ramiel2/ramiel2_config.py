@@ -101,7 +101,10 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         decimation = 4
 
     class asset( MonoLeggedRobotCfg.asset ):
+        enable_tendon = False
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/ramiel2/urdf/ramiel2.urdf'
+        if enable_tendon:
+            file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/ramiel2/urdf/ramiel2_tendon.urdf'
         tendon_config_file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/ramiel2/config/ramiel2_tendon_config.yaml'
         name = "ramiel2"
         foot_name = 'leg_link'
