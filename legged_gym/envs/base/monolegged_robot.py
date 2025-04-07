@@ -114,12 +114,11 @@ class MonoLeggedRobot(BaseTask):
         self.actions = torch.clip(actions[:], -clip_actions, clip_actions).to(self.device)
 
         #TendonRobotModelの更新
-        self.tendon_robot_model.update_state(self.dof_pos, self.rigid_body_states, self.root_states)
+        self.tendon_robot_model.update_state(self.dof_pos[:, self.joint_idx], self.rigid_body_states, self.root_states)
 
         # step physics and render each frame
         self.render()
         for _ in range(self.cfg.control.decimation):
-            # self.torques = self._compute_torques(self.actions).view(self.torques.shape)
             self.torques = self._compute_torques(actions_delayed_clipped).view(self.torques.shape)
             self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self.torques))
             self.gym.apply_rigid_body_force_tensors(self.sim,
@@ -389,19 +388,21 @@ class MonoLeggedRobot(BaseTask):
             [numpy.array]: Modified DOF properties
         """
         if env_id==0:
-            self.dof_pos_limits = torch.zeros(self.num_dof, 2, dtype=torch.float, device=self.device, requires_grad=False)
+            self.joint_dof_pos_limits = torch.zeros(len(self.joint_idx), 2, dtype=torch.float, device=self.device, requires_grad=False)
             self.dof_vel_limits = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
             self.torque_limits = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
             for i in range(len(props)):
-                if props["hasLimits"][i]:
+                if i in self.joint_idx:
+                    #if dof[i] is joint, set joint_dof_pos_limits
+                    joint_idx = self.joint_idx.index(i)
                     #dof_limits
-                    self.dof_pos_limits[i, 0] = props["lower"][i].item()
-                    self.dof_pos_limits[i, 1] = props["upper"][i].item()
+                    self.joint_dof_pos_limits[joint_idx, 0] = props["lower"][i].item()
+                    self.joint_dof_pos_limits[joint_idx, 1] = props["upper"][i].item()
                     # soft dof limits
-                    m = (self.dof_pos_limits[i, 0] + self.dof_pos_limits[i, 1]) / 2
-                    r = self.dof_pos_limits[i, 1] - self.dof_pos_limits[i, 0]
-                    self.dof_pos_limits[i, 0] = m - 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
-                    self.dof_pos_limits[i, 1] = m + 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
+                    m = (self.joint_dof_pos_limits[joint_idx, 0] + self.joint_dof_pos_limits[joint_idx, 1]) / 2
+                    r = self.joint_dof_pos_limits[joint_idx, 1] - self.joint_dof_pos_limits[joint_idx, 0]
+                    self.joint_dof_pos_limits[joint_idx, 0] = m - 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
+                    self.joint_dof_pos_limits[joint_idx, 1] = m + 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
                 self.dof_vel_limits[i] = props["velocity"][i].item()
                 self.torque_limits[i] = props["effort"][i].item()
 
@@ -533,34 +534,56 @@ class MonoLeggedRobot(BaseTask):
         Returns:
             [torch.Tensor]: Torques sent to the simulation
         """
-        #pd controller
+        #pd controller for joint
         actions_scaled = actions * self.cfg.control.action_scale
         control_type = self.cfg.control.control_type
         if control_type=="P":
-            torques = self.p_gains*(actions_scaled + self.default_dof_pos - self.dof_pos) - self.d_gains*self.dof_vel
+            joint_torques = self.p_gains[self.joint_idx]*(actions_scaled + self.default_dof_pos[:, self.joint_idx] - self.dof_pos[:, self.joint_idx]) - self.d_gains[self.joint_idx]*self.dof_vel[:, self.joint_idx]
         elif control_type=="V":
-            torques = self.p_gains*(actions_scaled - self.dof_vel) - self.d_gains*(self.dof_vel - self.last_dof_vel)/self.sim_params.dt
+            joint_torques = self.p_gains[self.joint_idx]*(actions_scaled - self.dof_vel[:, self.joint_idx]) - self.d_gains[self.joint_idx]*(self.dof_vel[:, self.joint_idx] - self.last_dof_vel[:, self.joint_idx])/self.sim_params.dt
         elif control_type=="T":
-            torques = actions_scaled
+            joint_torques = actions_scaled
         else:
             raise NameError(f"Unknown controller type: {control_type}")
-        torques_clipped =  torch.clip(torques, -self.torque_limits, self.torque_limits)
+        joint_torques_clipped =  torch.clip(joint_torques, -self.torque_limits[self.joint_idx], self.torque_limits[self.joint_idx])
 
-        #トルク変換NNに入力するために, 関節角度とトルクを正規化する
-        dof_pos_input_normalized = (self.dof_pos - self.dof_pos_limits[:, 0]) / (self.dof_pos_limits[:, 1] - self.dof_pos_limits[:, 0])
-        torques_input_normalized = (torques_clipped + self.torque_limits) / (2 * self.torque_limits)
-        nn_input = torch.cat([dof_pos_input_normalized, torques_input_normalized], dim=1)
+        if self.cfg.env.enable_tendon:
+            #use tendon
+            #トルク変換NNに入力するために, 関節角度とトルクを正規化する
+            joint_dof_pos_input_normalized = (self.dof_pos[:, self.joint_idx] - self.joint_dof_pos_limits[:, 0]) / (self.joint_dof_pos_limits[:, 1] - self.joint_dof_pos_limits[:, 0])
+            joint_torques_input_normalized = (joint_torques_clipped + self.torque_limits[self.joint_idx]) / (2 * self.torque_limits[self.joint_idx])
+            nn_input = torch.cat([joint_dof_pos_input_normalized, joint_torques_input_normalized], dim=1)
 
-        #現在の関節角度と目標発揮トルクから実際に発揮可能なトルク(正規化)を計算
-        torques_nn_normalized = self.torque_convert_net(nn_input)
+            #現在の関節角度と目標発揮トルクから実際に発揮可能なトルク(正規化)を計算
+            joint_torques_nn_normalized = self.torque_convert_net(nn_input)
+            
+            #トルクのスケールを元に戻す
+            joint_torques_nn = joint_torques_nn_normalized * (2 * self.torque_limits[self.joint_idx]) - self.torque_limits[self.joint_idx]
+
+            #トルクにローパスフィルタをかける
+            joint_torques_output = self.torques[:, self.joint_idx] + self.sim_params.dt * (joint_torques_nn - self.torques[:, self.joint_idx]) / self.dynprms
+            torques = torch.zeros_like(self.torques)
+            torques[:, self.joint_idx] = joint_torques_output
+            return torques
         
-        #トルクのスケールを元に戻す
-        torques_nn = torques_nn_normalized * (2 * self.torque_limits) - self.torque_limits
+        else:
+            #not use tendon
+            #トルク変換NNに入力するために, 関節角度とトルクを正規化する
+            joint_dof_pos_input_normalized = (self.dof_pos[:, self.joint_idx] - self.joint_dof_pos_limits[:, 0]) / (self.joint_dof_pos_limits[:, 1] - self.joint_dof_pos_limits[:, 0])
+            joint_torques_input_normalized = (joint_torques_clipped + self.torque_limits[self.joint_idx]) / (2 * self.torque_limits[self.joint_idx])
+            nn_input = torch.cat([joint_dof_pos_input_normalized, joint_torques_input_normalized], dim=1)
 
-        #トルクにローパスフィルタをかける
-        torques_output = self.torques + self.sim_params.dt * (torques_nn - self.torques) / self.dynprms
+            #現在の関節角度と目標発揮トルクから実際に発揮可能なトルク(正規化)を計算
+            joint_torques_nn_normalized = self.torque_convert_net(nn_input)
+            
+            #トルクのスケールを元に戻す
+            joint_torques_nn = joint_torques_nn_normalized * (2 * self.torque_limits[self.joint_idx]) - self.torque_limits[self.joint_idx]
 
-        return torques_output
+            #トルクにローパスフィルタをかける
+            joint_torques_output = self.torques[:, self.joint_idx] + self.sim_params.dt * (joint_torques_nn - self.torques[:, self.joint_idx]) / self.dynprms
+
+            return joint_torques_output
+
 
     def _reset_dofs(self, env_ids):
         """ Resets DOF position and velocities of selected environmments
@@ -705,11 +728,11 @@ class MonoLeggedRobot(BaseTask):
         noise_vec[3:6] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel
         noise_vec[6:9] = noise_scales.gravity * noise_level
         noise_vec[9:12] = 0. # commands
-        noise_vec[12:15] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
-        noise_vec[15:18] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
-        noise_vec[18:21] = 0. # previous actions
+        noise_vec[12:(12+self.num_dof)] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
+        noise_vec[(12+self.num_dof):(12+2*self.num_dof)] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
+        noise_vec[(12+2*self.num_dof):(15+2*self.num_dof)] = 0. # previous actions
         if self.cfg.terrain.measure_heights:
-            noise_vec[21:235] = noise_scales.height_measurements* noise_level * self.obs_scales.height_measurements
+            noise_vec[(15+2*self.num_dof):235] = noise_scales.height_measurements* noise_level * self.obs_scales.height_measurements
         return noise_vec
 
     #----------------------------------------
@@ -740,9 +763,9 @@ class MonoLeggedRobot(BaseTask):
         self.noise_scale_vec = self._get_noise_scale_vec(self.cfg)
         self.gravity_vec = to_torch(get_axis_params(-1., self.up_axis_idx), device=self.device).repeat((self.num_envs, 1))
         self.forward_vec = to_torch([1., 0., 0.], device=self.device).repeat((self.num_envs, 1))
-        self.torques = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
-        self.p_gains = torch.zeros(self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
-        self.d_gains = torch.zeros(self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
+        self.torques = torch.zeros(self.num_envs, self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
+        self.p_gains = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
+        self.d_gains = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
         self.actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
         self.last_actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
         self.last_last_actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
@@ -784,7 +807,7 @@ class MonoLeggedRobot(BaseTask):
         # joint positions offsets and PD gains
         self.default_dof_pos = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
         print(self.dof_names)
-        for i in range(self.num_dofs):
+        for i in range(self.num_dof):
             name = self.dof_names[i]
             angle = self.cfg.init_state.default_joint_angles[name]
             self.default_dof_pos[i] = angle
@@ -909,7 +932,6 @@ class MonoLeggedRobot(BaseTask):
         body_names = self.gym.get_asset_rigid_body_names(robot_asset)
         self.dof_names = self.gym.get_asset_dof_names(robot_asset)
         self.num_bodies = len(body_names)
-        self.num_dofs = len(self.dof_names)
         feet_names = [s for s in body_names if self.cfg.asset.foot_name in s]
         penalized_contact_names = []
         for name in self.cfg.asset.penalize_contacts_on:
@@ -1122,20 +1144,19 @@ class MonoLeggedRobot(BaseTask):
         #return the square of the deviation
         return torch.square(penalty_below) + torch.square(penalty_above)
 
-    def _reward_torques(self):
+    def _reward_joint_torques(self):
         # Penalize torques
         # scale 3 dof torque
         scale = torch.tensor([1.0, 1.0, 0.05], device=self.device)
-        return torch.sum(torch.square(self.torques)*scale, dim=1)*self.reward_curriculum_weight
+        return torch.sum(torch.square(self.torques[:, self.joint_idx])*scale, dim=1)*self.reward_curriculum_weight
 
-    def _reward_dof_vel(self):
+    def _reward_joint_dof_vel(self):
         # Penalize dof velocities
-        return torch.sum(torch.square(self.dof_vel), dim=1)*self.reward_curriculum_weight
+        return torch.sum(torch.square(self.dof_vel[:, self.joint_idx]), dim=1)*self.reward_curriculum_weight
 
-    def _reward_dof_acc(self):
+    def _reward_joint_dof_acc(self):
         # Penalize dof accelerations
-        scale = torch.tensor([1.0, 1.0, 1.0], device=self.device)
-        return torch.sum(torch.square((self.last_dof_vel - self.dof_vel) / self.dt)*scale, dim=1)*self.reward_curriculum_weight
+        return torch.sum(torch.square((self.last_dof_vel[:, self.joint_idx] - self.dof_vel[:, self.joint_idx]) / self.dt), dim=1)*self.reward_curriculum_weight
 
     def _reward_action_rate(self):
         # Penalize changes in actions
@@ -1150,20 +1171,20 @@ class MonoLeggedRobot(BaseTask):
         # Terminal reward / penalty
         return self.reset_buf * ~self.time_out_buf * self.reward_curriculum_weight
 
-    def _reward_dof_pos_limits(self):
+    def _reward_joint_dof_pos_limits(self):
         # Penalize dof positions too close to the limit
-        out_of_limits = -(self.dof_pos - self.dof_pos_limits[:, 0]).clip(max=0.) # lower limit
-        out_of_limits += (self.dof_pos - self.dof_pos_limits[:, 1]).clip(min=0.)
+        out_of_limits = -(self.dof_pos[:, self.joint_idx] - self.joint_dof_pos_limits[:, 0]).clip(max=0.) # lower limit
+        out_of_limits += (self.dof_pos[:, self.joint_idx] - self.joint_dof_pos_limits[:, 1]).clip(min=0.)
         return torch.sum(out_of_limits, dim=1)
 
-    def _reward_dof_vel_limits(self):
+    def _reward_joint_dof_vel_limits(self):
         # Penalize dof velocities too close to the limit
         # clip to max error = 1 rad/s per joint to avoid huge penalties
-        return torch.sum((torch.abs(self.dof_vel) - self.dof_vel_limits*self.cfg.rewards.soft_dof_vel_limit).clip(min=0., max=1.), dim=1)
+        return torch.sum((torch.abs(self.dof_vel[:, self.joint_idx]) - self.dof_vel_limits[self.joint_idx]*self.cfg.rewards.soft_dof_vel_limit).clip(min=0., max=1.), dim=1)
 
-    def _reward_torque_limits(self):
+    def _reward_joint_torque_limits(self):
         # penalize torques too close to the limit
-        return torch.sum((torch.abs(self.torques) - self.torque_limits*self.cfg.rewards.soft_torque_limit).clip(min=0.), dim=1)
+        return torch.sum((torch.abs(self.torques[:, self.joint_idx]) - self.torque_limits[self.joint_idx]*self.cfg.rewards.soft_torque_limit).clip(min=0.), dim=1)
 
     def _reward_tracking_lin_vel(self):
         # Tracking of linear velocity commands (xy axes)

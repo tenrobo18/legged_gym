@@ -39,6 +39,7 @@ class MonoLeggedRobotCfg(BaseConfig):
         env_spacing = 3.  # not used with heightfields/trimeshes 
         send_timeouts = True # send time out information to the algorithm
         episode_length_s = 20 # max episode length in seconds
+        enable_tendon = False
 
     class terrain:
         mesh_type = 'trimesh' # "heightfield" # none, plane, heightfield or trimesh
@@ -134,9 +135,9 @@ class MonoLeggedRobotCfg(BaseConfig):
             tracking_ang_vel = 0.5
             ang_vel_xyz = -0.05
             orientation = -0.
-            torques = -0.00001
-            dof_vel = -0.
-            dof_acc = -2.5e-7
+            joint_torques = -0.00001
+            joint_dof_vel = -0.
+            joint_dof_acc = -2.5e-7
             base_height_range = -0. 
             feet_air_time =  1.0
             collision = -1.

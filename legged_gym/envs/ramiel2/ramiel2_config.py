@@ -30,11 +30,18 @@
 
 from legged_gym.envs.base.monolegged_robot_config import MonoLeggedRobotCfg, MonoLeggedRobotCfgPPO
 
+enable_tendon = True
+
 class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
-    class env( MonoLeggedRobotCfg.env):
+    class env(MonoLeggedRobotCfg.env):
+        MonoLeggedRobotCfg.env.enable_tendon = enable_tendon
         num_envs = 2048
-        num_observations = 18 + 1
-        num_privileged_obs = 18 + 1 + 16
+        if enable_tendon:
+            num_observations = 6 * 2 + 18 + 1
+            num_privileged_obs = 6 * 3 + 18 + 1 + 16
+        else: 
+            num_observations = 18 + 1
+            num_privileged_obs = 18 + 1 + 16
         # num_observations = 169
         num_actions = 3
 
@@ -76,6 +83,12 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
             'roll': 0.0,
             'pitch': 0.0,
             'slide': -0.2,
+            'motor_0': 0.0,
+            'motor_1': 0.0,
+            'motor_2': 0.0,
+            'motor_3': 0.0,
+            'motor_4': 0.0,
+            'motor_5': 0.0,
         }
 
     class commands:
@@ -101,10 +114,10 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         decimation = 4
 
     class asset( MonoLeggedRobotCfg.asset ):
-        enable_tendon = False
-        file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/ramiel2/urdf/ramiel2.urdf'
         if enable_tendon:
             file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/ramiel2/urdf/ramiel2_tendon.urdf'
+        else:
+            file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/ramiel2/urdf/ramiel2.urdf'
         tendon_config_file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/ramiel2/config/ramiel2_tendon_config.yaml'
         name = "ramiel2"
         foot_name = 'leg_link'
@@ -151,13 +164,13 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
             orientation = -10.0
             base_height_range = -10.0
             ang_vel_xyz = -0.01
-            torques = -3.0e-4
-            dof_acc = -1.0e-4
-            dof_vel = -1.0e-2
+            joint_torques = -3.0e-4
+            joint_dof_acc = -1.0e-4
+            joint_dof_vel = -1.0e-2
             stumble = -3.0
-            dof_pos_limits = -100.0
-            dof_vel_limits = -0.1
-            torque_limits = -1e-3
+            joint_dof_pos_limits = -100.0
+            joint_dof_vel_limits = -0.1
+            joint_torque_limits = -1e-3
             collision = -1.0
             foot_slippage = -0.1
 

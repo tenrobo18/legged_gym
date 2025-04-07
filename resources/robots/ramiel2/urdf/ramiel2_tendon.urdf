@@ -790,6 +790,9 @@
       link="motor_0_link" />
     <axis
       xyz="-1 0 0" />
+    <limit
+      effort="10"
+      velocity="2000" />
   </joint>
   <link
     name="motor_1_link">
@@ -843,6 +846,9 @@
       link="motor_1_link" />
     <axis
       xyz="-1 0 0" />
+    <limit
+      effort="10"
+      velocity="2000" />
   </joint>
   <link
     name="motor_2_link">
@@ -896,6 +902,9 @@
       link="motor_2_link" />
     <axis
       xyz="-0.99863 -0.052336 0" />
+    <limit
+      effort="10"
+      velocity="2000" />
   </joint>
   <link
     name="motor_3_link">
@@ -949,6 +958,9 @@
       link="motor_3_link" />
     <axis
       xyz="-1 0 0" />
+    <limit
+      effort="10"
+      velocity="2000" />
   </joint>
   <link
     name="motor_4_link">
@@ -1002,6 +1014,9 @@
       link="motor_4_link" />
     <axis
       xyz="-0.99863 0.052336 0" />
+    <limit
+      effort="10"
+      velocity="2000" />
   </joint>
   <link
     name="motor_5_link">
@@ -1055,5 +1070,8 @@
       link="motor_5_link" />
     <axis
       xyz="-1 0 0" />
+    <limit
+      effort="10"
+      velocity="2000" />
   </joint>
 </robot>
