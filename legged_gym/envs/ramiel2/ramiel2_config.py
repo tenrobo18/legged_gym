@@ -29,6 +29,8 @@
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
 from legged_gym.envs.base.monolegged_robot_config import MonoLeggedRobotCfg, MonoLeggedRobotCfgPPO
+import torch
+from torch import Tensor
 
 enable_tendon = True
 
@@ -128,6 +130,8 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         dof_friction = {'motor_0': 0., 'motor_1': 0., 'motor_2': 0., 'motor_3': 0., 'motor_4': 0., 'motor_5': 0., 'roll': 0., 'pitch': 0., 'slide': 0.}
         dof_armature = {'motor_0': 0., 'motor_1': 0., 'motor_2': 0., 'motor_3': 0., 'motor_4': 0., 'motor_5': 0., 'roll': 0.54811795, 'pitch': 0.54811064, 'slide': 9.51120847}
         dof_kind = {'motor_0' : 'motor', 'motor_1' : 'motor', 'motor_2' : 'motor', 'motor_3' : 'motor', 'motor_4' : 'motor', 'motor_5' : 'motor', 'roll' : 'joint', 'pitch' : 'joint', 'slide' : 'joint'}
+        tension_min = torch.tensor([50.0, 50.0, 50.0, 50.0, 50.0, 50.0])
+        tension_max = torch.tensor([400.0, 400.0, 400.0, 400.0, 400.0, 400.0])
 
     class domain_rand:
         randomize_friction = True

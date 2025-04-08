@@ -114,7 +114,7 @@ class MonoLeggedRobot(BaseTask):
         self.actions = torch.clip(actions[:], -clip_actions, clip_actions).to(self.device)
 
         #TendonRobotModelの更新
-        self.tendon_robot_model.update_state(self.dof_pos[:, self.joint_idx], self.rigid_body_states, self.root_states)
+        self.tendon_robot_model.update_state(self.dof_pos[:, self.joint_idx], self.rigid_body_states)
 
         # step physics and render each frame
         self.render()
@@ -560,6 +560,12 @@ class MonoLeggedRobot(BaseTask):
             #トルクのスケールを元に戻す
             joint_torques_nn = joint_torques_nn_normalized * (2 * self.torque_limits[self.joint_idx]) - self.torque_limits[self.joint_idx]
 
+            #トルクを張力に変換する
+            tension_ref = self.tendon_robot_model.calc_tendon_tension_qp(joint_torques_nn) #calc tension with qp
+            jacobian = self.tendon_robot_model.get_tendon_jacobian()
+            tau_from_tension = torch.einsum("bij,bj->bi", jacobian, tension_ref)
+            tau_diff = tau_from_tension - joint_torques_nn
+
             #トルクにローパスフィルタをかける
             joint_torques_output = self.torques[:, self.joint_idx] + self.sim_params.dt * (joint_torques_nn - self.torques[:, self.joint_idx]) / self.dynprms
             torques = torch.zeros_like(self.torques)
@@ -998,12 +1004,10 @@ class MonoLeggedRobot(BaseTask):
 
         #TendonRobotModelのインスタンスを生成して初期化 
         yaml_path = self.cfg.asset.tendon_config_file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR)
-        self.tendon_robot_model = TendonRobotModel(yaml_path, asset_path, self.num_envs, self.device)
-        # 各tendonのviaのrigid_body_indicesを設定
-        for t in range(self.tendon_robot_model.num_tendons):
-            for v in range(len(self.tendon_robot_model.tendon_via_names[t])):
-                via_name = self.tendon_robot_model.tendon_via_names[t][v]
-                self.tendon_robot_model.tendon_via_indices[t][v] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], via_name)
+        self.tendon_robot_model = TendonRobotModel(yaml_path, asset_path, self.num_envs, self.device, self.gym, self.envs, self.actor_handles)
+        #張力の下限・上限を設定
+        self.tendon_robot_model.set_min_tension(self.cfg.asset.tension_min)
+        self.tendon_robot_model.set_max_tension(self.cfg.asset.tension_max)
 
     def _get_env_origins(self):
         """ Sets environment origins. On rough terrain the origins are defined by the terrain platforms.

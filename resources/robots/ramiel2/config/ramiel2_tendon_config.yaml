@@ -1,5 +1,6 @@
 ModelName: "ramiel2"
 JointList: ["roll", "pitch", "slide"]
+RootLink: "base_link"
 TendonList:
   - TendonId: 0
     ViaPoints:

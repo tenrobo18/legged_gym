@@ -1,12 +1,13 @@
 import torch
 import yaml
 import xml.etree.ElementTree as ET
+from qpth.qp import QPFunction
 
 from isaacgym.torch_utils import *
 from isaacgym import gymtorch, gymapi, gymutil
 
 class TendonRobotModel:
-    def __init__(self, yaml_path, urdf_path, num_envs, device):
+    def __init__(self, yaml_path, urdf_path, num_envs, device, gym, envs, actor_handles):
         """
         Args:
             yaml_path (str): パラメータファイル（params.yaml）のパス
@@ -16,13 +17,17 @@ class TendonRobotModel:
         """
         self.device = device
         self.num_envs = num_envs
+        self.gym = gym
+        self.envs = envs
+        self.actor_handles = actor_handles
 
         # YAMLからジョイント情報とワイヤ情報を読み込む
         with open(yaml_path, 'r') as f:
             params = yaml.safe_load(f)
         self.joint_names = params["JointList"]
         self.num_joints = len(self.joint_names)
-        
+        self.root_name = params["RootLink"]
+        self.root_idx = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], self.root_name)
         tendon_list = params["TendonList"]
         self.num_tendons = len(tendon_list)
         # 各ワイヤについて、viaの名前リストを保持
@@ -125,10 +130,26 @@ class TendonRobotModel:
             self.tendon_via_pos.append(torch.zeros((num_envs, num_vias, 3), dtype=torch.float32, device=device))
             self.tendon_via_indices.append([None] * num_vias)
 
+        # 各tendonのviaのrigid_body_indicesを設定
+        for t in range(self.num_tendons):
+            for v in range(len(self.tendon_via_names[t])):
+                via_name = self.tendon_via_names[t][v]
+                self.tendon_via_indices[t][v] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], via_name)
+
         self.tendon_lengths = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
         self.tendon_jacobian = torch.zeros((num_envs, self.num_joints, self.num_tendons), dtype=torch.float32, device=device)
 
-    def update_state(self, dof_pos_tensor, rigid_body_state, root_state):
+        #二次計画法の初期化
+        self.W = 0.00001 * torch.eye(self.num_tendons, device=self.device)
+        self.lambda_mat = torch.eye(self.num_joints, device=self.device)
+        # G_ineq は (2*num_tendons, num_tendons) で、上半分で f <= tension_max, 下半分で -f <= -tension_min を表す
+        I = torch.eye(self.num_tendons, device=self.device)
+        self.G_ineq = torch.cat([I, -I], dim=0)
+        # 張力下限・上限（1D tensor, shape=(num_tendons,)）は set_min/max_tension で設定される
+        self.tension_max = torch.zeros(self.num_tendons, device=self.device)
+        self.tension_min = torch.zeros(self.num_tendons, device=self.device)
+
+    def update_state(self, dof_pos_tensor, rigid_body_state):
         """
         各環境分の関節角度・変位および剛体状態から、ジョイントとワイヤ内のviaの位置を一括更新する
         Args:
@@ -147,12 +168,14 @@ class TendonRobotModel:
             self.joint_axis[:, i, :] = axis_updated.squeeze(-1)
 
         # ワイヤ内の各viaについて、外部から設定済みの rigid_body_state のインデックスを使って位置を更新
+        root_pos_global = rigid_body_state[:, self.root_idx, 0:3]
+        root_quat_global = rigid_body_state[:, self.root_idx, 3:7]
         for t, via_names in enumerate(self.tendon_via_names):
             num_vias = len(via_names)
             for i in range(num_vias):
                 idx = self.tendon_via_indices[t][i]
                 via_pos_global = rigid_body_state[:, idx, 0:3]
-                via_pos_base = quat_rotate_inverse(root_state[:, 3:7], via_pos_global - root_state[:, 0:3]) # ベースリンク座標系への変換
+                via_pos_base = quat_rotate_inverse(root_quat_global, via_pos_global - root_pos_global) # ベースリンク座標系への変換
                 self.tendon_via_pos[t][:, i, :] = via_pos_base
                 
         self.calc_tendon_len()
@@ -304,3 +327,67 @@ class TendonRobotModel:
         # diff と cross の内積 / ||cross||
         distance = (diff * cross).sum(dim=-1) / cross_norm  # (batch_size, num_pairs)
         return distance
+    
+    def get_tendon_jacobian(self):
+        return self.tendon_jacobian
+
+    def set_min_tension(self, tension_min):
+        """
+        最小張力の設定
+        Args:
+            tension_min: (num_tendons,) の 1D tensor
+        """
+        if tension_min.shape[0] != self.num_tendons:
+            print("[TendonRobotModel]: set_min_tension Error")
+            return
+        self.tension_min = tension_min.to(self.device)
+
+    def set_max_tension(self, tension_max):
+        """
+        最大張力の設定
+        Args:
+            tension_max: (num_tendons,) の 1D tensor
+        """
+        if tension_max.shape[0] != self.num_tendons:
+            print("[TendonRobotModel]: set_max_tension Error")
+            return
+        self.tension_max = tension_max.to(self.device)
+
+    def calc_tendon_tension_qp(self, tau_ref):
+        """
+        二次計画法（QP）で tendon 張力を計算する.
+        Args:
+            tau_ref: (num_envs, num_joints) の tensor – 各環境ごとの目標関節トルク
+        Returns:
+            tension: (num_envs, num_tendons) の tensor – 最適化された張力
+        """
+        # Jm を (num_envs, num_tendons, num_joints) に変換する
+        Jm = self.tendon_jacobian.transpose(1, 2)  
+
+        # QP の行列・ベクトルをバッチ対応で作成
+        # W: 小さな正則化項。self.W は (num_tendons, num_tendons) なので，バッチ展開する
+        W_batch = self.W.unsqueeze(0).expand(self.num_envs, -1, -1)  # (num_envs, num_tendons, num_tendons)
+        # Q = W + Jm @ Jm^T
+        Q = W_batch + torch.bmm(Jm, Jm.transpose(1,2))  # (num_envs, num_tendons, num_tendons)
+        # g0 = Jm @ tau_ref (ここでは tau_ref の shape を (num_envs, num_joints, 1) として計算)
+        p = torch.bmm(Jm, tau_ref.unsqueeze(2)).squeeze(2)  # (num_envs, num_tendons)
+
+        # 不等式制約: tension_min <= f <= tension_max を G f <= h の形に変換
+        # f <= tension_max  →  f - tension_max <= 0
+        # f >= tension_min  →  -f + tension_min <= 0
+        h_upper = self.tension_max.unsqueeze(0).expand(self.num_envs, -1)  # (num_envs, num_tendons)
+        h_lower = - self.tension_min.unsqueeze(0).expand(self.num_envs, -1)  # (num_envs, num_tendons)
+        h_ineq = torch.cat([h_upper, h_lower], dim=1)  # (num_envs, 2*num_tendons)
+        # バッチ対応の不等式行列 G_ineq：self.G_ineq は (2*num_tendons, num_tendons) → (num_envs, 2*num_tendons, num_tendons)
+        G = self.G_ineq.unsqueeze(0).expand(self.num_envs, -1, -1)
+
+        # 等式制約はなし → 空テンソルを用意
+        A = torch.empty(self.num_envs, 0, self.num_tendons, device=self.device)
+        b = torch.empty(self.num_envs, 0, device=self.device)
+
+        # qpth の QPFunction を用いて解く
+        qp_solver = QPFunction(verbose=-1, eps=1e-1, maxIter=5)
+        tension = qp_solver(Q, p, G, h_ineq, A, b)  # (num_envs, num_tendons)
+
+        return tension
+
