@@ -92,6 +92,14 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
             'motor_4': 0.0,
             'motor_5': 0.0,
         }
+        default_tendon_strains = {
+            'motor_0': 0.02,
+            'motor_1': 0.02,
+            'motor_2': 0.02,
+            'motor_3': 0.02,
+            'motor_4': 0.02,
+            'motor_5': 0.02,
+        }
 
     class commands:
         curriculum = False
@@ -132,6 +140,8 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         dof_kind = {'motor_0' : 'motor', 'motor_1' : 'motor', 'motor_2' : 'motor', 'motor_3' : 'motor', 'motor_4' : 'motor', 'motor_5' : 'motor', 'roll' : 'joint', 'pitch' : 'joint', 'slide' : 'joint'}
         tension_min = torch.tensor([50.0, 50.0, 50.0, 50.0, 50.0, 50.0])
         tension_max = torch.tensor([400.0, 400.0, 400.0, 400.0, 400.0, 400.0])
+        l_in_robot = torch.tensor([0.34, 0.34, 0.34, 0.34, 0.34, 0.34]) 
+        pulley_radius = torch.tensor([0.01, 0.01, 0.01, 0.01, 0.01, 0.01]) # wire winding pulley radius[m]
 
     class domain_rand:
         randomize_friction = True

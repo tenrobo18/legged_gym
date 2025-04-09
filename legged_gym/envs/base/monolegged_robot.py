@@ -114,7 +114,7 @@ class MonoLeggedRobot(BaseTask):
         self.actions = torch.clip(actions[:], -clip_actions, clip_actions).to(self.device)
 
         #TendonRobotModelの更新
-        self.tendon_robot_model.update_state(self.dof_pos[:, self.joint_idx], self.rigid_body_states)
+        self.tendon_robot_model.update_state(self.dof_pos, self.dof_vel, self.rigid_body_states)
 
         # step physics and render each frame
         self.render()
@@ -229,6 +229,10 @@ class MonoLeggedRobot(BaseTask):
         self._reset_disturbances(env_ids)
 
         self._resample_commands(env_ids)
+
+        if self.cfg.env.enable_tendon:
+            # reset tendon model
+            self._reset_tendons(env_ids)
 
         # reset buffers
         self.last_actions[env_ids] = 0.
@@ -545,31 +549,18 @@ class MonoLeggedRobot(BaseTask):
             joint_torques = actions_scaled
         else:
             raise NameError(f"Unknown controller type: {control_type}")
-        joint_torques_clipped =  torch.clip(joint_torques, -self.torque_limits[self.joint_idx], self.torque_limits[self.joint_idx])
+        joint_torques_ref_clipped =  torch.clip(joint_torques, -self.torque_limits[self.joint_idx], self.torque_limits[self.joint_idx])
 
         if self.cfg.env.enable_tendon:
             #use tendon
-            #トルク変換NNに入力するために, 関節角度とトルクを正規化する
-            joint_dof_pos_input_normalized = (self.dof_pos[:, self.joint_idx] - self.joint_dof_pos_limits[:, 0]) / (self.joint_dof_pos_limits[:, 1] - self.joint_dof_pos_limits[:, 0])
-            joint_torques_input_normalized = (joint_torques_clipped + self.torque_limits[self.joint_idx]) / (2 * self.torque_limits[self.joint_idx])
-            nn_input = torch.cat([joint_dof_pos_input_normalized, joint_torques_input_normalized], dim=1)
-
-            #現在の関節角度と目標発揮トルクから実際に発揮可能なトルク(正規化)を計算
-            joint_torques_nn_normalized = self.torque_convert_net(nn_input)
-            
-            #トルクのスケールを元に戻す
-            joint_torques_nn = joint_torques_nn_normalized * (2 * self.torque_limits[self.joint_idx]) - self.torque_limits[self.joint_idx]
-
             #トルクを張力に変換する
-            tension_ref = self.tendon_robot_model.calc_tendon_tension_qp(joint_torques_nn) #calc tension with qp
+            tension_ref = self.tendon_robot_model.calc_tendon_tension_qp(joint_torques_ref_clipped) #calc tension with qp
             jacobian = self.tendon_robot_model.get_tendon_jacobian()
             tau_from_tension = torch.einsum("bij,bj->bi", jacobian, tension_ref)
-            tau_diff = tau_from_tension - joint_torques_nn
 
             #トルクにローパスフィルタをかける
-            joint_torques_output = self.torques[:, self.joint_idx] + self.sim_params.dt * (joint_torques_nn - self.torques[:, self.joint_idx]) / self.dynprms
             torques = torch.zeros_like(self.torques)
-            torques[:, self.joint_idx] = joint_torques_output
+            torques[:, self.joint_idx] = self.torques[:, self.joint_idx] + self.sim_params.dt * (tau_from_tension - self.torques[:, self.joint_idx]) / self.dynprms
             return torques
         
         else:
@@ -695,6 +686,17 @@ class MonoLeggedRobot(BaseTask):
                                                    torch.randint_like(self.terrain_levels[env_ids], self.max_terrain_level),
                                                    torch.clip(self.terrain_levels[env_ids], 0)) # (the minumum level is zero)
         self.env_origins[env_ids] = self.terrain_origins[self.terrain_levels[env_ids], self.terrain_types[env_ids]]
+
+    def _reset_tendons(self, env_ids):
+        """ Reset tendon strain of selected environmments
+        strains are randomly selected within 0.5:1.5 x default strain.
+
+        Args:
+            env_ids (List[int]): Environemnt ids
+        """
+        self.tendon_robot_model.update_state(self.dof_pos, self.dof_vel, self.rigid_body_states)
+        strain = self.default_tendon_strains * torch_rand_float(0.5, 1.5, (len(env_ids), len(self.motor_idx)), device=self.device)
+        self.tendon_robot_model.set_tendon_strain(strain, env_ids)
 
     def update_command_curriculum(self, env_ids):
         """ Implements a curriculum of increasing commands
@@ -829,6 +831,17 @@ class MonoLeggedRobot(BaseTask):
                 if self.cfg.control.control_type in ["P", "V"]:
                     print(f"PD gain of joint {name} were not defined, setting them to zero")
         self.default_dof_pos = self.default_dof_pos.unsqueeze(0)
+
+        # tendon strain
+        self.default_tendon_strains = torch.zeros(len(self.motor_idx), dtype=torch.float, device=self.device, requires_grad=False)
+        if self.cfg.env.enable_tendon:
+            for i in range(len(self.motor_idx)):
+                motor_id = self.motor_idx[i]
+                name = self.dof_names[motor_id]
+                strain = self.cfg.init_state.default_tendon_strains[name]
+                self.default_tendon_strains[motor_id] = strain
+            self.default_tendon_strains = self.default_tendon_strains.unsqueeze(0)
+            
 
     def _prepare_reward_function(self):
         """ Prepares a list of reward functions, whcih will be called to compute the total reward.
@@ -1004,7 +1017,9 @@ class MonoLeggedRobot(BaseTask):
 
         #TendonRobotModelのインスタンスを生成して初期化 
         yaml_path = self.cfg.asset.tendon_config_file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR)
-        self.tendon_robot_model = TendonRobotModel(yaml_path, asset_path, self.num_envs, self.device, self.gym, self.envs, self.actor_handles)
+        l_in_robot = self.cfg.asset.l_in_robot.to(self.device)
+        pulley_radius = self.cfg.asset.pulley_radius.to(self.device)
+        self.tendon_robot_model = TendonRobotModel(yaml_path, asset_path, self.num_envs, self.device, l_in_robot, self.joint_idx, self.motor_idx, pulley_radius, self.gym, self.envs, self.actor_handles)
         #張力の下限・上限を設定
         self.tendon_robot_model.set_min_tension(self.cfg.asset.tension_min)
         self.tendon_robot_model.set_max_tension(self.cfg.asset.tension_max)

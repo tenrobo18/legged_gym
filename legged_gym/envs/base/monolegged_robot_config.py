@@ -86,6 +86,9 @@ class MonoLeggedRobotCfg(BaseConfig):
         default_joint_angles = { # target angles when action = 0.0
             "joint_a": 0., 
             "joint_b": 0.}
+        default_tendon_strains = { # target strains when action = 0.0
+            "motor_a": 0., 
+            "motor_b": 0.}
 
     class control:
         control_type = 'P' # P: position, V: velocity, T: torques

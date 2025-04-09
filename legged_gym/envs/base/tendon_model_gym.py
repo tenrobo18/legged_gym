@@ -7,7 +7,7 @@ from isaacgym.torch_utils import *
 from isaacgym import gymtorch, gymapi, gymutil
 
 class TendonRobotModel:
-    def __init__(self, yaml_path, urdf_path, num_envs, device, gym, envs, actor_handles):
+    def __init__(self, yaml_path, urdf_path, num_envs, device, tendon_length_in_robot, joint_idx, motor_idx, pulley_radius, gym, envs, actor_handles):
         """
         Args:
             yaml_path (str): パラメータファイル（params.yaml）のパス
@@ -20,6 +20,11 @@ class TendonRobotModel:
         self.gym = gym
         self.envs = envs
         self.actor_handles = actor_handles
+        self.tendon_length_in_robot = torch.tensor(tendon_length_in_robot, dtype=torch.float32, device=device).unsqueeze(0).expand(num_envs, -1)
+        self.joint_idx = joint_idx
+        self.motor_idx = motor_idx
+        self.pulley_radius = pulley_radius
+        self.num_tendons = len(self.motor_idx)
 
         # YAMLからジョイント情報とワイヤ情報を読み込む
         with open(yaml_path, 'r') as f:
@@ -136,7 +141,11 @@ class TendonRobotModel:
                 via_name = self.tendon_via_names[t][v]
                 self.tendon_via_indices[t][v] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], via_name)
 
-        self.tendon_lengths = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
+        self.motor_dof_pos = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
+        self.tendon_lengths_joint = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
+        self.tendon_lengths_motor = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
+        self.tendon_lengths_motor_offset = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
+        self.tendon_strain = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
         self.tendon_jacobian = torch.zeros((num_envs, self.num_joints, self.num_tendons), dtype=torch.float32, device=device)
 
         #二次計画法の初期化
@@ -149,7 +158,7 @@ class TendonRobotModel:
         self.tension_max = torch.zeros(self.num_tendons, device=self.device)
         self.tension_min = torch.zeros(self.num_tendons, device=self.device)
 
-    def update_state(self, dof_pos_tensor, rigid_body_state):
+    def update_state(self, dof_pos_tensor, dof_vel_tensor, rigid_body_state):
         """
         各環境分の関節角度・変位および剛体状態から、ジョイントとワイヤ内のviaの位置を一括更新する
         Args:
@@ -157,8 +166,13 @@ class TendonRobotModel:
             rigid_body_state: (num_envs, num_rigid_bodies, 3) の tensor。各環境の剛体位置
             root_state: (num_envs, 3) の tensor。各環境のベースリンクの状態. [0:3] は位置, [3:7] はクォータニオン, [7:10] は並進速度, [10:13] は角速度
         """
+
+        self.joint_dof_pos = dof_pos_tensor[:, self.joint_idx]
+        self.motor_dof_pos = dof_pos_tensor[:, self.motor_idx]
+        self.joint_dof_vel = dof_vel_tensor[:, self.joint_idx]
+        self.motor_dof_vel = dof_vel_tensor[:, self.motor_idx]
+
         #jointのaxisとoriginを更新
-        self.joint_dof_pos = dof_pos_tensor
         self.calc_transration_matrix()
         self.joint_origin = self.t_global[:, :, :3, 3]
         for i in range(self.num_joints):
@@ -178,8 +192,11 @@ class TendonRobotModel:
                 via_pos_base = quat_rotate_inverse(root_quat_global, via_pos_global - root_pos_global) # ベースリンク座標系への変換
                 self.tendon_via_pos[t][:, i, :] = via_pos_base
                 
-        self.calc_tendon_len()
-        self.calc_tendon_jacobian()
+        self.tendon_lengths_joint = self.calc_tendon_len_joint(self.tendon_via_pos, self.tendon_length_in_robot, self.device)
+        self.tendon_lengths_motor = self.calc_tendon_len_motor(self.pulley_radius, self.motor_dof_pos, self.tendon_lengths_motor_offset)
+        self.tendon_vels_motor = self.calc_tendon_vel_motor(self.pulley_radius, self.motor_dof_vel)
+        self.strain = self.calc_tendon_strain(self.tendon_lengths_joint, self.tendon_lengths_motor)
+        self.tendon_jacobian = self.calc_tendon_jacobian()
 
     def create_translation_matrix(self, t):
         """
@@ -268,15 +285,47 @@ class TendonRobotModel:
                     self.t_global[:, i, :, :] = torch.bmm(self.t_joint[:, parent_idx, :, :], self.t_global[:, i, :, :])
                     parent_idx = self.joint_parent_idx[parent_idx]
 
-    def calc_tendon_len(self):
+    def calc_tendon_len_joint(self, tendon_via_pos_, tendon_length_in_robot_, device):
         """
-        各tendonについて、各viaの連続する2点間のユークリッド距離の和を計算し、self.tendon_lengthsに格納する。
+        各tendonについて、各viaの連続する2点間のユークリッド距離の和を計算し、self.tendon_lengths_jointに格納する。
         """
+        tendon_lengths_joint_ = torch.zeros((self.num_envs, self.num_tendons), dtype=torch.float32, device=device)
         for t in range(self.num_tendons):
-            via_pos = self.tendon_via_pos[t]
+            via_pos = tendon_via_pos_[t]
             via_pos_diff = via_pos[:, 1:, :] - via_pos[:, :-1, :]
             via_pos_diff_norm = torch.norm(via_pos_diff, dim=-1)
-            self.tendon_lengths[:, t] = torch.sum(via_pos_diff_norm, dim=-1)
+            tendon_lengths_joint_[:, t] = torch.sum(via_pos_diff_norm, dim=-1) + tendon_length_in_robot_[:, t]
+        return tendon_lengths_joint_
+
+    def calc_tendon_len_motor(self, pulley_radius_, motor_dof_pos_, tendon_lengths_motor_offset_):
+        """
+        各tendonについて、motorのdof_posからワイヤ長を計算し, self.tendon_lengths_motorに格納する
+        """
+        tendon_lengths_motor_ = pulley_radius_ * motor_dof_pos_ + tendon_lengths_motor_offset_
+        return tendon_lengths_motor_
+
+    def calc_tendon_vel_motor(self, pulley_radius_, motor_dof_vel_):
+        """
+        各tendonについて、motorのdof_velからワイヤの速度を計算し, self.tendon_vel_motorに格納する
+        """
+        tendon_vel_motor_ = pulley_radius_ * motor_dof_vel_
+        return tendon_vel_motor_
+
+    def set_tendon_strain(self, strain, env_ids):
+        """
+        指定された歪になるようにワイヤの長さ(モータ変位から計算)のオフセットを設定する
+        Args:
+            strain: (num_envs, num_tendons) の tensor – 各環境の各ワイヤの歪
+        """
+        self.tendon_lengths_motor_offset[env_ids] = (self.tendon_lengths_joint[env_ids] + (1 + strain) * self.pulley_radius * self.motor_dof_pos[env_ids]) / (1 + strain)
+
+    def calc_tendon_strain(self, tendon_lengths_joint_, tendon_lengths_motor_):
+        """
+        tendon strain の計算
+        tendon strain = (tendon_length_joint - tendon_length_motor) / tendon_length_motor
+        """
+        strain = (tendon_lengths_joint_ - tendon_lengths_motor_) / tendon_lengths_motor_
+        return strain
 
     def calc_tendon_jacobian(self):
         """
@@ -307,7 +356,7 @@ class TendonRobotModel:
                             # 直動関節の場合：関節軸とワイヤ直線単位ベクトルの内積を各セグメントで計算して合計
                             moment_arm += torch.sum(joint_axis_unit * via_pos_diff_unit[:, k, :], dim=1)
                 J[:, i, j] = moment_arm
-        self.tendon_jacobian = J
+        return J
 
     def line_line_signed_distance(self, p0, d0, p1, d1):
         """
