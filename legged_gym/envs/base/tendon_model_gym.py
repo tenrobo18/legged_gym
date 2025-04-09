@@ -147,6 +147,8 @@ class TendonRobotModel:
         self.tendon_lengths_motor_offset = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
         self.tendon_strain = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
         self.tendon_jacobian = torch.zeros((num_envs, self.num_joints, self.num_tendons), dtype=torch.float32, device=device)
+        self.kd_pull = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
+        self.kd_loosen = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
 
         #二次計画法の初期化
         self.W = 0.00001 * torch.eye(self.num_tendons, device=self.device)
@@ -287,7 +289,7 @@ class TendonRobotModel:
 
     def calc_tendon_len_joint(self, tendon_via_pos_, tendon_length_in_robot_, device):
         """
-        各tendonについて、各viaの連続する2点間のユークリッド距離の和を計算し、self.tendon_lengths_jointに格納する。
+        各tendonについて、各viaの連続する2点間のユークリッド距離の和を計算
         """
         tendon_lengths_joint_ = torch.zeros((self.num_envs, self.num_tendons), dtype=torch.float32, device=device)
         for t in range(self.num_tendons):
@@ -299,17 +301,35 @@ class TendonRobotModel:
 
     def calc_tendon_len_motor(self, pulley_radius_, motor_dof_pos_, tendon_lengths_motor_offset_):
         """
-        各tendonについて、motorのdof_posからワイヤ長を計算し, self.tendon_lengths_motorに格納する
+        各tendonについて、motorのdof_posからワイヤ長を計算
         """
         tendon_lengths_motor_ = pulley_radius_ * motor_dof_pos_ + tendon_lengths_motor_offset_
         return tendon_lengths_motor_
 
     def calc_tendon_vel_motor(self, pulley_radius_, motor_dof_vel_):
         """
-        各tendonについて、motorのdof_velからワイヤの速度を計算し, self.tendon_vel_motorに格納する
+        各tendonについて、motorのdof_velからワイヤの速度を計算
         """
         tendon_vel_motor_ = pulley_radius_ * motor_dof_vel_
         return tendon_vel_motor_
+
+    def set_kd_pull(self, motor_idx, kd_pull_i):
+        """
+        ワイヤの張力を引き上げるためのゲインを設定
+        Args:
+            motor_idx: (1) – ワイヤのモータインデックス
+            kd_pull: (1) の tensor – ワイヤ巻取り時のダンパ項
+        """
+        self.kd_pull[:, motor_idx] = torch.full((self.num_envs,), kd_pull_i, device=self.device)
+
+    def set_kd_loosen(self, motor_idx, kd_loosen_i):
+        """
+        ワイヤの張力を緩めるためのゲインを設定
+        Args:
+            motor_idx: (1) – ワイヤのモータインデックス
+            kd_loosen: (1) の tensor – ワイヤ緩め時のダンパ項
+        """
+        self.kd_loosen[:, motor_idx] = torch.full((self.num_envs,), kd_loosen_i, device=self.device)
 
     def set_tendon_strain(self, strain, env_ids):
         """
@@ -377,6 +397,12 @@ class TendonRobotModel:
         distance = (diff * cross).sum(dim=-1) / cross_norm  # (batch_size, num_pairs)
         return distance
     
+    def get_tendion_vels_motor(self):
+        return self.tendon_vels_motor
+    
+    def get_tendon_strain(self):
+        return self.strain
+
     def get_tendon_jacobian(self):
         return self.tendon_jacobian
 
@@ -439,4 +465,18 @@ class TendonRobotModel:
         tension = qp_solver(Q, p, G, h_ineq, A, b)  # (num_envs, num_tendons)
 
         return tension
-
+    
+    def add_directional_velfb2tension(self, tension, tendon_vel):
+        """
+        張力に対してワイヤの速度を加える
+        Args:
+            tension: (num_envs, num_tendons) の tensor – 各環境ごとの張力
+            tendon_vel: (num_envs, num_tendons) の tensor – 各環境ごとのワイヤの速度
+        Returns:
+            tension: (num_envs, num_tendons) の tensor – 更新された張力
+        """
+        # tendon_vel が負の場合は kd_pull、それ以外は kd_loosen を使用して補正を行う
+        gains = torch.where(tendon_vel < 0, self.kd_pull, self.kd_loosen)
+        # 補正： tension - (選択したゲイン) * tendon_vel
+        updated_tension = tension - gains * tendon_vel
+        return updated_tension

@@ -99,6 +99,8 @@ class MonoLeggedRobotCfg(BaseConfig):
         action_scale = 0.5
         # decimation: Number of control action updates @ sim DT per policy DT
         decimation = 4
+        kd_pull = {'motor_a': 0.5, 'motor_b': 0.5} # [N*m/rad]
+        kd_loosen = {'motor_a': 0.5, 'motor_b': 0.5} # [N*m/rad]
 
     class asset:
         file = ""

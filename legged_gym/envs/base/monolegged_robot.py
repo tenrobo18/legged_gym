@@ -553,8 +553,10 @@ class MonoLeggedRobot(BaseTask):
 
         if self.cfg.env.enable_tendon:
             #use tendon
-            #トルクを張力に変換する
-            tension_ref = self.tendon_robot_model.calc_tendon_tension_qp(joint_torques_ref_clipped) #calc tension with qp
+            tension_ref = self.tendon_robot_model.calc_tendon_tension_qp(joint_torques_ref_clipped) #関節トルクを張力に変換する
+            tendon_vel = self.tendon_robot_model.get_tendion_vels_motor() 
+            tension_ref_with_vel_fb = self.tendon_robot_model.add_directional_velfb2tension(tension_ref, tendon_vel) #張力に速度フィードバックをかける
+
             jacobian = self.tendon_robot_model.get_tendon_jacobian()
             tau_from_tension = torch.einsum("bij,bj->bi", jacobian, tension_ref)
 
@@ -832,7 +834,7 @@ class MonoLeggedRobot(BaseTask):
                     print(f"PD gain of joint {name} were not defined, setting them to zero")
         self.default_dof_pos = self.default_dof_pos.unsqueeze(0)
 
-        # tendon strain
+        # tendon strain, kd
         self.default_tendon_strains = torch.zeros(len(self.motor_idx), dtype=torch.float, device=self.device, requires_grad=False)
         if self.cfg.env.enable_tendon:
             for i in range(len(self.motor_idx)):
@@ -840,6 +842,10 @@ class MonoLeggedRobot(BaseTask):
                 name = self.dof_names[motor_id]
                 strain = self.cfg.init_state.default_tendon_strains[name]
                 self.default_tendon_strains[motor_id] = strain
+                for motor_name in self.cfg.control.kd_pull.keys():
+                    if motor_name in name:
+                        self.tendon_robot_model.set_kd_pull(i, self.cfg.control.kd_pull[motor_name])
+                        self.tendon_robot_model.set_kd_loosen(i, self.cfg.control.kd_loosen[motor_name])
             self.default_tendon_strains = self.default_tendon_strains.unsqueeze(0)
             
 

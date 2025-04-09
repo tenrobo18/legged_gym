@@ -122,6 +122,8 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         action_scale = 0.2
         # decimation: Number of control action updates @ sim DT per policy DT
         decimation = 4
+        kd_pull = {'motor_0': 0.0, 'motor_1': 0.0, 'motor_2': 0.0, 'motor_3': 0.0, 'motor_4': 0.0, 'motor_5': 0.0}
+        kd_loosen = {'motor_0': 0.0, 'motor_1': 0.0, 'motor_2': 0.0, 'motor_3': 0.0, 'motor_4': 0.0, 'motor_5': 0.0}
 
     class asset( MonoLeggedRobotCfg.asset ):
         if enable_tendon:
