@@ -141,10 +141,11 @@ class TendonRobotModel:
                 via_name = self.tendon_via_names[t][v]
                 self.tendon_via_indices[t][v] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], via_name)
 
-        self.motor_dof_pos = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
-        self.tendon_lengths_joint = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
-        self.tendon_lengths_motor = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
+        self.motor_dof_pos = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device) # motorのdof_pos [rad] pull -> +
+        self.tendon_lengths_joint = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device) # tendon length calculated from joint[m] pull -> -
+        self.tendon_lengths_motor = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device) # tendon length calculatef from motor[m] pull -> -
         self.tendon_lengths_motor_offset = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
+        self.tendon_vels_motor = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device) # tendon velocity calculated from motor[m] pull -> -
         self.tendon_strain = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
         self.tendon_jacobian = torch.zeros((num_envs, self.num_joints, self.num_tendons), dtype=torch.float32, device=device)
         self.kd_pull = torch.zeros((num_envs, self.num_tendons), dtype=torch.float32, device=device)
@@ -303,14 +304,14 @@ class TendonRobotModel:
         """
         各tendonについて、motorのdof_posからワイヤ長を計算
         """
-        tendon_lengths_motor_ = pulley_radius_ * motor_dof_pos_ + tendon_lengths_motor_offset_
+        tendon_lengths_motor_ = - pulley_radius_ * motor_dof_pos_ + tendon_lengths_motor_offset_ 
         return tendon_lengths_motor_
 
     def calc_tendon_vel_motor(self, pulley_radius_, motor_dof_vel_):
         """
         各tendonについて、motorのdof_velからワイヤの速度を計算
         """
-        tendon_vel_motor_ = pulley_radius_ * motor_dof_vel_
+        tendon_vel_motor_ = - pulley_radius_ * motor_dof_vel_
         return tendon_vel_motor_
 
     def set_kd_pull(self, motor_idx, kd_pull_i):
