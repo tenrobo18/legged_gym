@@ -145,7 +145,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         terminate_after_contacts_on = ['base_link']
         flip_visual_attachments = False
         self_collisions = 1 # 1 to disable, 0 to enable...bitwise filter
-        dof_damping = {'motor_0': 0., 'motor_1': 0., 'motor_2': 0., 'motor_3': 0., 'motor_4': 0., 'motor_5': 0., 'roll': 2., 'pitch': 2., 'slide': 35.}
+        dof_damping = {'motor_0': 0.05, 'motor_1': 0.05, 'motor_2': 0.05, 'motor_3': 0.05, 'motor_4': 0.05, 'motor_5': 0.05, 'roll': 2., 'pitch': 2., 'slide': 35.}
         dof_friction = {'motor_0': 0., 'motor_1': 0., 'motor_2': 0., 'motor_3': 0., 'motor_4': 0., 'motor_5': 0., 'roll': 0., 'pitch': 0., 'slide': 0.}
         dof_armature = {'motor_0': 0., 'motor_1': 0., 'motor_2': 0., 'motor_3': 0., 'motor_4': 0., 'motor_5': 0., 'roll': 0.54811795, 'pitch': 0.54811064, 'slide': 9.51120847}
         dof_kind = {'motor_0' : 'motor', 'motor_1' : 'motor', 'motor_2' : 'motor', 'motor_3' : 'motor', 'motor_4' : 'motor', 'motor_5' : 'motor', 'roll' : 'joint', 'pitch' : 'joint', 'slide' : 'joint'}

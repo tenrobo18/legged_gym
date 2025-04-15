@@ -768,19 +768,10 @@
           rgba="0.8902 0.8902 0.91373 1" />
       </material>
     </visual>
-    <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="../meshes/motor_0_link.STL" />
-      </geometry>
-    </collision>
   </link>
   <joint
     name="motor_0"
-    type="continuous">
+    type="revolute">
     <origin
       xyz="-0.019259 -0.23197 0.00725"
       rpy="0 0 2.1468" />
@@ -824,19 +815,10 @@
           rgba="0.8902 0.8902 0.91373 1" />
       </material>
     </visual>
-    <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="../meshes/motor_1_link.STL" />
-      </geometry>
-    </collision>
   </link>
   <joint
     name="motor_1"
-    type="continuous">
+    type="revolute">
     <origin
       xyz="0.21052 0.099308 0.00725"
       rpy="0 0 -2.042" />
@@ -880,19 +862,10 @@
           rgba="0.8902 0.8902 0.91373 1" />
       </material>
     </visual>
-    <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="../meshes/motor_2_link.STL" />
-      </geometry>
-    </collision>
   </link>
   <joint
     name="motor_2"
-    type="continuous">
+    type="revolute">
     <origin
       xyz="-0.19127 0.13266 0.00725"
       rpy="0 0 0" />
@@ -936,19 +909,10 @@
           rgba="0.8902 0.8902 0.91373 1" />
       </material>
     </visual>
-    <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="../meshes/motor_3_link.STL" />
-      </geometry>
-    </collision>
   </link>
   <joint
     name="motor_3"
-    type="continuous">
+    type="revolute">
     <origin
       xyz="-0.019259 0.23197 -0.00725"
       rpy="0 0 -2.1468" />
@@ -992,19 +956,10 @@
           rgba="0.8902 0.8902 0.91373 1" />
       </material>
     </visual>
-    <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="../meshes/motor_4_link.STL" />
-      </geometry>
-    </collision>
   </link>
   <joint
     name="motor_4"
-    type="continuous">
+    type="revolute">
     <origin
       xyz="-0.19127 -0.13266 -0.00725"
       rpy="0 0 0" />
@@ -1048,19 +1003,10 @@
           rgba="0.8902 0.8902 0.91373 1" />
       </material>
     </visual>
-    <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="../meshes/motor_5_link.STL" />
-      </geometry>
-    </collision>
   </link>
   <joint
     name="motor_5"
-    type="continuous">
+    type="revolute">
     <origin
       xyz="0.210523758501758 -0.0993079211435383 -0.00724999999999996"
       rpy="0 0 2.04203522483338" />

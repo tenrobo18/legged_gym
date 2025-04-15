@@ -123,13 +123,11 @@ class MonoLeggedRobot(BaseTask):
         actions_delayed_clipped = torch.clip(actions_delayed, -clip_actions, clip_actions).to(self.device)
         self.actions = torch.clip(actions[:], -clip_actions, clip_actions).to(self.device)
 
-        #TendonRobotModelの更新
-        if self.cfg.env.enable_tendon:
-            self.tendon_robot_model.update_state(self.dof_pos, self.dof_vel, self.rigid_body_states)
-
         # step physics and render each frame
         self.render()
         for _ in range(self.cfg.control.decimation):
+            if self.cfg.env.enable_tendon:
+                self.tendon_robot_model.update_state(self.dof_pos, self.dof_vel, self.rigid_body_states)
             self.torques = self._compute_torques(actions_delayed_clipped).view(self.torques.shape)
             self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self.torques))
             self.gym.apply_rigid_body_force_tensors(self.sim,
@@ -433,7 +431,9 @@ class MonoLeggedRobot(BaseTask):
                 props[i]["damping"] = 0.
                 props[i]["friction"] = 0.
                 props[i]["armature"] = 0.
-        
+            if self.cfg.asset.dof_kind[name] == "motor":
+                props[i]["hasLimits"] = False
+
         # print("damping: ", props["damping"])
         # print("friction: ", props["friction"])
         # print("armature: ", props["armature"])
@@ -598,11 +598,16 @@ class MonoLeggedRobot(BaseTask):
             # 目標張力, 歪, ワイヤ速度(モータから計算)の履歴から実張力を計算する
             tension_cur_nn_input = torch.cat([self.tension_ref_history * self.cfg.control.tension_cur_net.tension_ref_weight, self.tendon_strain_history * self.cfg.control.tension_cur_net.tendon_strain_weight, self.tendon_vel_motor_history * self.cfg.control.tension_cur_net.tendon_vel_motor_weight], dim=2)
             tension_cur = self.tension_cur_net(tension_cur_nn_input) / self.cfg.control.tension_cur_net.tension_cur_weight
+            tension_cur = tension_cur.squeeze()
+            tension_cur = torch.clip(tension_cur, min=0.)
 
             # 張力から関節トルクを計算する
             jacobian = self.tendon_robot_model.get_tendon_jacobian()
-            tau_from_tension = - torch.einsum("bij,bj->bi", jacobian, tension_ref_with_vel_fb)
+            tau_joint_from_tension = - torch.einsum("bij,bj->bi", jacobian, tension_cur)
             # tau_from_tension_qp = - torch.einsum("bij,bj->bi", jacobian, tension_ref_qp)
+
+            # 張力からモータトルクを計算する
+            tau_motor = (tension_ref - tension_cur) * self.pulley_radius
 
             # print("----------------")
             # print("joint_dof_pos: ", self.dof_pos[:, self.joint_idx])
@@ -612,9 +617,19 @@ class MonoLeggedRobot(BaseTask):
             # print("tau_from_nn: ", tau_from_tension)
             # print("tau_from_qp: ", tau_from_tension_qp)
 
-            #トルクにローパスフィルタをかける
+            # print("----------------")
+            # print("dof_pos: ", self.dof_pos)
+            # print("dof_vel: ", self.dof_vel)
+            # print("strain_cur: ", tendon_strain)
+            # # print("tendon_vel_motor: ", tendon_vel_motor)
+            # print("tension_cur: ", tension_cur)
+            # print("tension_ref: ", tension_ref)
+            # print("tau_motor: ", tau_motor)
+
+            #トルクに代入
             torques = torch.zeros_like(self.torques)
-            torques[:, self.joint_idx] = self.torques[:, self.joint_idx] + self.sim_params.dt * (tau_from_tension - self.torques[:, self.joint_idx]) / self.dynprms
+            torques[:, self.joint_idx] = tau_joint_from_tension
+            torques[:, self.motor_idx] = tau_motor
             return torques
         
         else:
@@ -1083,9 +1098,9 @@ class MonoLeggedRobot(BaseTask):
 
         #TendonRobotModelのインスタンスを生成して初期化 
         yaml_path = self.cfg.asset.tendon_config_file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR)
-        l_in_robot = self.cfg.asset.l_in_robot.to(self.device)
-        pulley_radius = self.cfg.asset.pulley_radius.to(self.device)
-        self.tendon_robot_model = TendonRobotModel(yaml_path, asset_path, self.num_envs, self.device, l_in_robot, self.joint_idx, self.motor_idx, pulley_radius, self.gym, self.envs, self.actor_handles)
+        self.l_in_robot = self.cfg.asset.l_in_robot.to(self.device)
+        self.pulley_radius = self.cfg.asset.pulley_radius.to(self.device)
+        self.tendon_robot_model = TendonRobotModel(yaml_path, asset_path, self.num_envs, self.device, self.l_in_robot, self.joint_idx, self.motor_idx, self.pulley_radius, self.gym, self.envs, self.actor_handles)
         #張力の下限・上限を設定
         self.tension_min = self.cfg.asset.tension_min.to(self.device)
         self.tension_max = self.cfg.asset.tension_max.to(self.device)
