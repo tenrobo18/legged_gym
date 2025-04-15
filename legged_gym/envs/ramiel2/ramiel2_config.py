@@ -124,6 +124,15 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         decimation = 4
         kd_pull = {'motor_0': 0.0, 'motor_1': 0.0, 'motor_2': 0.0, 'motor_3': 0.0, 'motor_4': 0.0, 'motor_5': 0.0}
         kd_loosen = {'motor_0': 0.0, 'motor_1': 0.0, 'motor_2': 0.0, 'motor_3': 0.0, 'motor_4': 0.0, 'motor_5': 0.0}
+        torque_convert_net_file = "{LEGGED_GYM_ROOT_DIR}/resources/tendon_nets/ramiel2_torque_convert_net.pt"
+        torque2tension_net_file = "{LEGGED_GYM_ROOT_DIR}/resources/tendon_nets/ramiel2_torque2tension_net.pt"
+        class tension_cur_net:
+            file = "{LEGGED_GYM_ROOT_DIR}/resources/tendon_nets/ramiel2_tension_cur_net.pt"
+            input_steps = 10
+            tension_cur_weight = 0.01
+            tension_ref_weight = 0.01
+            tendon_strain_weight = 20.
+            tendon_vel_motor_weight = 0.5
 
     class asset( MonoLeggedRobotCfg.asset ):
         if enable_tendon:

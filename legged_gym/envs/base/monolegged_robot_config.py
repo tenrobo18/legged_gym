@@ -101,6 +101,15 @@ class MonoLeggedRobotCfg(BaseConfig):
         decimation = 4
         kd_pull = {'motor_a': 0.5, 'motor_b': 0.5} # [N*m/rad]
         kd_loosen = {'motor_a': 0.5, 'motor_b': 0.5} # [N*m/rad]
+        torque_convert_net_file = "{LEGGED_GYM_ROOT_DIR}/resources/tendon_nets/ramiel2_torque_convert_net.pt"
+        torque2tension_net_file = "{LEGGED_GYM_ROOT_DIR}/resources/tendon_nets/ramiel2_torque2tension_net.pt"
+        class tension_cur_net:
+            file = "{LEGGED_GYM_ROOT_DIR}/resources/tendon_nets/ramiel2_tension_cur_net.pt"
+            input_steps = 10
+            tension_cur_weight = 0.01
+            tension_ref_weight = 0.01
+            tendon_strain_weight = 20.
+            tendon_vel_motor_weight = 0.5
 
     class asset:
         file = ""

@@ -81,9 +81,19 @@ class MonoLeggedRobot(BaseTask):
         self.init_done = True
         
         #目標関節トルクから実際に発揮可能な関節トルクを計算するNN
-        torque_convert_net_path = f'{LEGGED_GYM_ROOT_DIR}/resources/torque_convert_nets/ramiel2_torque_convert_net.pt'
+        torque_convert_net_path = self.cfg.control.torque_convert_net_file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR)
         self.torque_convert_net = torch.jit.load(torque_convert_net_path).to(self.device)
         self.torque_convert_net.eval()
+
+        #目標関節トルクから目標張力を計算するNN
+        torque2tension_net_path = self.cfg.control.torque2tension_net_file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR)
+        self.torque2tension_net = torch.jit.load(torque2tension_net_path).to(self.device)
+        self.torque2tension_net.eval()
+
+        #目標張力, 歪, ワイヤ速度(モータから計算)の履歴からワイヤ張力を計算するNN
+        tension_cur_net_path = self.cfg.control.tension_cur_net.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR)
+        self.tension_cur_net = torch.jit.load(tension_cur_net_path).to(self.device)
+        self.tension_cur_net.eval()
 
     def render(self):
         if self.camera_track_robot:
@@ -114,7 +124,8 @@ class MonoLeggedRobot(BaseTask):
         self.actions = torch.clip(actions[:], -clip_actions, clip_actions).to(self.device)
 
         #TendonRobotModelの更新
-        self.tendon_robot_model.update_state(self.dof_pos, self.dof_vel, self.rigid_body_states)
+        if self.cfg.env.enable_tendon:
+            self.tendon_robot_model.update_state(self.dof_pos, self.dof_vel, self.rigid_body_states)
 
         # step physics and render each frame
         self.render()
@@ -553,12 +564,53 @@ class MonoLeggedRobot(BaseTask):
 
         if self.cfg.env.enable_tendon:
             #use tendon
-            tension_ref = self.tendon_robot_model.calc_tendon_tension_qp(joint_torques_ref_clipped) #関節トルクを張力に変換する
-            tendon_vel = self.tendon_robot_model.get_tendion_vels_motor() 
-            tension_ref_with_vel_fb = self.tendon_robot_model.add_directional_velfb2tension(tension_ref, tendon_vel) #張力に速度フィードバックをかける
+            tendon_vel_motor = self.tendon_robot_model.get_tendion_vels_motor() 
+            tendon_strain = self.tendon_robot_model.get_tendon_strain()
+            
+            #関節トルクを張力に変換する(qpを使う)
+            # tension_ref_qp = self.tendon_robot_model.calc_tendon_tension_qp(joint_torques_ref_clipped) 
+            
+            # トルク変換NNに入力するために, 関節角度とトルクを正規化する
+            joint_dof_pos_input_normalized = (self.dof_pos[:, self.joint_idx] - self.joint_dof_pos_limits[:, 0]) / (self.joint_dof_pos_limits[:, 1] - self.joint_dof_pos_limits[:, 0])
+            joint_torques_input_normalized = (joint_torques_ref_clipped + self.torque_limits[self.joint_idx]) / (2 * self.torque_limits[self.joint_idx])
+            nn_input = torch.cat([joint_dof_pos_input_normalized, joint_torques_input_normalized], dim=1)
 
+            # 現在の関節角度と目標発揮トルクから目標張力(正規化)を計算
+            tension_ref_normalized = self.torque2tension_net(nn_input)
+            
+            # 目標張力(正規化)を0-1の範囲に収める
+            tension_ref_normalized = torch.clip(tension_ref_normalized, 0, 1)
+
+            # 目標張力のスケールを元に戻す
+            tension_ref = tension_ref_normalized * (self.tension_max - self.tension_min) + self.tension_min
+
+            # 目標張力に速度フィードバックをかける
+            tension_ref_with_vel_fb = self.tendon_robot_model.add_directional_velfb2tension(tension_ref, tendon_vel_motor)
+
+            #tension_ref_history, tendon_strain_history, tendion_vel_motor_historyの3次元目のデータの先頭を削除し, 一番後ろに最新データを追加する
+            self.tension_ref_history = torch.roll(self.tension_ref_history, shifts=-1, dims=2)
+            self.tendon_strain_history = torch.roll(self.tendon_strain_history, shifts=-1, dims=2)
+            self.tendon_vel_motor_history = torch.roll(self.tendon_vel_motor_history, shifts=-1, dims=2)
+            self.tension_ref_history[:, :, -1] = tension_ref_with_vel_fb
+            self.tendon_strain_history[:, :, -1] = tendon_strain
+            self.tendon_vel_motor_history[:, :, -1] = tendon_vel_motor
+
+            # 目標張力, 歪, ワイヤ速度(モータから計算)の履歴から実張力を計算する
+            tension_cur_nn_input = torch.cat([self.tension_ref_history * self.cfg.control.tension_cur_net.tension_ref_weight, self.tendon_strain_history * self.cfg.control.tension_cur_net.tendon_strain_weight, self.tendon_vel_motor_history * self.cfg.control.tension_cur_net.tendon_vel_motor_weight], dim=2)
+            tension_cur = self.tension_cur_net(tension_cur_nn_input) / self.cfg.control.tension_cur_net.tension_cur_weight
+
+            # 張力から関節トルクを計算する
             jacobian = self.tendon_robot_model.get_tendon_jacobian()
-            tau_from_tension = torch.einsum("bij,bj->bi", jacobian, tension_ref)
+            tau_from_tension = - torch.einsum("bij,bj->bi", jacobian, tension_ref_with_vel_fb)
+            # tau_from_tension_qp = - torch.einsum("bij,bj->bi", jacobian, tension_ref_qp)
+
+            # print("----------------")
+            # print("joint_dof_pos: ", self.dof_pos[:, self.joint_idx])
+            # print("tau_ref: ", joint_torques_ref_clipped)
+            # print("tension_ref_nn: ", tension_ref)
+            # print("tension_ref_qp: ", tension_ref_qp)
+            # print("tau_from_nn: ", tau_from_tension)
+            # print("tau_from_qp: ", tau_from_tension_qp)
 
             #トルクにローパスフィルタをかける
             torques = torch.zeros_like(self.torques)
@@ -569,7 +621,7 @@ class MonoLeggedRobot(BaseTask):
             #not use tendon
             #トルク変換NNに入力するために, 関節角度とトルクを正規化する
             joint_dof_pos_input_normalized = (self.dof_pos[:, self.joint_idx] - self.joint_dof_pos_limits[:, 0]) / (self.joint_dof_pos_limits[:, 1] - self.joint_dof_pos_limits[:, 0])
-            joint_torques_input_normalized = (joint_torques_clipped + self.torque_limits[self.joint_idx]) / (2 * self.torque_limits[self.joint_idx])
+            joint_torques_input_normalized = (joint_torques_ref_clipped + self.torque_limits[self.joint_idx]) / (2 * self.torque_limits[self.joint_idx])
             nn_input = torch.cat([joint_dof_pos_input_normalized, joint_torques_input_normalized], dim=1)
 
             #現在の関節角度と目標発揮トルクから実際に発揮可能なトルク(正規化)を計算
@@ -699,6 +751,10 @@ class MonoLeggedRobot(BaseTask):
         self.tendon_robot_model.update_state(self.dof_pos, self.dof_vel, self.rigid_body_states)
         strain = self.default_tendon_strains * torch_rand_float(0.5, 1.5, (len(env_ids), len(self.motor_idx)), device=self.device)
         self.tendon_robot_model.set_tendon_strain(strain, env_ids)
+
+        self.tension_ref_history[env_ids, :, :] = self.tension_min.unsqueeze(0).unsqueeze(-1).repeat(len(env_ids), 1, self.cfg.control.tension_cur_net.input_steps)
+        self.tendon_strain_history[env_ids, :, :] = strain.unsqueeze(-1).repeat(1, 1, self.cfg.control.tension_cur_net.input_steps)
+        self.tendon_vel_motor_history[env_ids, :, :] = torch.zeros(len(env_ids), len(self.motor_idx), self.cfg.control.tension_cur_net.input_steps, device=self.device)
 
     def update_command_curriculum(self, env_ids):
         """ Implements a curriculum of increasing commands
@@ -847,7 +903,11 @@ class MonoLeggedRobot(BaseTask):
                         self.tendon_robot_model.set_kd_pull(i, self.cfg.control.kd_pull[motor_name])
                         self.tendon_robot_model.set_kd_loosen(i, self.cfg.control.kd_loosen[motor_name])
             self.default_tendon_strains = self.default_tendon_strains.unsqueeze(0)
-            
+
+        # tension_ref_history, strain_history, tendon_vel_motor_history
+        self.tension_ref_history = torch.zeros((self.num_envs, len(self.motor_idx), self.cfg.control.tension_cur_net.input_steps), dtype=torch.float, device=self.device, requires_grad=False)
+        self.tendon_strain_history = torch.zeros((self.num_envs, len(self.motor_idx), self.cfg.control.tension_cur_net.input_steps), dtype=torch.float, device=self.device, requires_grad=False)
+        self.tendon_vel_motor_history = torch.zeros((self.num_envs, len(self.motor_idx), self.cfg.control.tension_cur_net.input_steps), dtype=torch.float, device=self.device, requires_grad=False)
 
     def _prepare_reward_function(self):
         """ Prepares a list of reward functions, whcih will be called to compute the total reward.
@@ -1027,6 +1087,8 @@ class MonoLeggedRobot(BaseTask):
         pulley_radius = self.cfg.asset.pulley_radius.to(self.device)
         self.tendon_robot_model = TendonRobotModel(yaml_path, asset_path, self.num_envs, self.device, l_in_robot, self.joint_idx, self.motor_idx, pulley_radius, self.gym, self.envs, self.actor_handles)
         #張力の下限・上限を設定
+        self.tension_min = self.cfg.asset.tension_min.to(self.device)
+        self.tension_max = self.cfg.asset.tension_max.to(self.device)
         self.tendon_robot_model.set_min_tension(self.cfg.asset.tension_min)
         self.tendon_robot_model.set_max_tension(self.cfg.asset.tension_max)
 
