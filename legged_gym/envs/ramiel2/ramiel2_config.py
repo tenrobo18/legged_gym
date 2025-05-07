@@ -32,7 +32,7 @@ from legged_gym.envs.base.monolegged_robot_config import MonoLeggedRobotCfg, Mon
 import torch
 from torch import Tensor
 
-enable_tendon = True
+enable_tendon = False
 
 class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
     class env(MonoLeggedRobotCfg.env):
@@ -204,7 +204,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         noise_level = 1.0 # scales other values
         curriculum = True
         curriculum_offset = 0.01
-        curriculum_decay = 0.99998
+        curriculum_decay = 0.9999
         class noise_scales:
             dof_pos = 0.05
             dof_vel = 1.0

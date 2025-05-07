@@ -603,11 +603,12 @@ class MonoLeggedRobot(BaseTask):
 
             # 張力から関節トルクを計算する
             jacobian = self.tendon_robot_model.get_tendon_jacobian()
-            tau_joint_from_tension = - torch.einsum("bij,bj->bi", jacobian, tension_cur)
+            tau_joint_from_tension = - torch.einsum("bij,bj->bi", jacobian, tension_ref_with_vel_fb)
+            # tau_joint_from_tension = - torch.einsum("bij,bj->bi", jacobian, tension_cur)
             # tau_from_tension_qp = - torch.einsum("bij,bj->bi", jacobian, tension_ref_qp)
 
             # 張力からモータトルクを計算する
-            tau_motor = (tension_ref - tension_cur) * self.pulley_radius
+            tau_motor = (tension_ref_with_vel_fb - tension_cur) * self.pulley_radius
 
             # print("----------------")
             # print("joint_dof_pos: ", self.dof_pos[:, self.joint_idx])
@@ -623,13 +624,13 @@ class MonoLeggedRobot(BaseTask):
             # print("strain_cur: ", tendon_strain)
             # # print("tendon_vel_motor: ", tendon_vel_motor)
             # print("tension_cur: ", tension_cur)
-            # print("tension_ref: ", tension_ref)
+            # print("tension_ref: ", tension_ref_with_vel_fb)
             # print("tau_motor: ", tau_motor)
 
             #トルクに代入
             torques = torch.zeros_like(self.torques)
             torques[:, self.joint_idx] = tau_joint_from_tension
-            torques[:, self.motor_idx] = tau_motor
+            # torques[:, self.motor_idx] = tau_motor
             return torques
         
         else:
@@ -811,9 +812,9 @@ class MonoLeggedRobot(BaseTask):
         noise_vec[9:12] = 0. # commands
         noise_vec[12:(12+self.num_dof)] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
         noise_vec[(12+self.num_dof):(12+2*self.num_dof)] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
-        noise_vec[(12+2*self.num_dof):(15+2*self.num_dof)] = 0. # previous actions
-        if self.cfg.terrain.measure_heights:
-            noise_vec[(15+2*self.num_dof):235] = noise_scales.height_measurements* noise_level * self.obs_scales.height_measurements
+        noise_vec[(12+2*self.num_dof):(13+2*self.num_dof)] = 0. # is standing
+        # if self.cfg.terrain.measure_heights:
+        #    noise_vec[(13+2*self.num_dof):235] = noise_scales.height_measurements* noise_level * self.obs_scales.height_measurements
         return noise_vec
 
     #----------------------------------------
