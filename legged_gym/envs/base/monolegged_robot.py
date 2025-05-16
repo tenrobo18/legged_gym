@@ -372,9 +372,9 @@ class MonoLeggedRobot(BaseTask):
                 num_buckets = 1024
                 r = torch.empty(num_buckets)
                 friction_buckets = torch.empty(num_buckets)
-                friction_buckets[:] = r.uniform_(0.0, 1.0)  # High friction
-                idx = slice(0, int(num_buckets * 0.2))
-                friction_buckets[idx] = r.uniform_(-0.6, -0.4)[idx]  # Low friction
+                friction_buckets[:] = r.uniform_(-0.2, 1.0)  # High friction
+                # idx = slice(0, int(num_buckets * 0.2))
+                # friction_buckets[idx] = r.uniform_(-0.6, -0.4)[idx]  # Low friction
 
                 bucket_ids = torch.randint(0, num_buckets, (self.num_envs, 1))  # One leg
                 self._friction_coeffs = friction_buckets[bucket_ids]
@@ -660,8 +660,8 @@ class MonoLeggedRobot(BaseTask):
         Args:
             env_ids (List[int]): Environemnt ids
         """
-        self.dof_pos[env_ids] = self.default_dof_pos * torch_rand_float(0.5, 1.5, (len(env_ids), self.num_dof), device=self.device)
-        # self.dof_pos[env_ids] = self.default_dof_pos + torch_rand_float(-0.3, 0.3, (len(env_ids), self.num_dof), device=self.device)
+        # self.dof_pos[env_ids] = self.default_dof_pos * torch_rand_float(0.5, 1.5, (len(env_ids), self.num_dof), device=self.device)
+        self.dof_pos[env_ids] = self.default_dof_pos + torch_rand_float(-0.2, 0.2, (len(env_ids), self.num_dof), device=self.device)
         self.dof_vel[env_ids] = 0.
 
         env_ids_int32 = env_ids.to(dtype=torch.int32)
@@ -710,8 +710,8 @@ class MonoLeggedRobot(BaseTask):
         self.external_forces[env_ids, 0, :] = 2.0 * torch.randn((len(env_ids), 3), device=self.device)
         max_force = self.noise_curriculum_weight[0] * 5.0
         self.external_forces[env_ids, 0, :] = torch.clip(self.external_forces[env_ids, 0, :], -max_force, max_force)
-        self.external_torques[env_ids, 0, :] = 2.0 * torch.randn((len(env_ids), 3), device=self.device)
-        max_torque = self.noise_curriculum_weight[0] * 5.0
+        self.external_torques[env_ids, 0, :] = 0.5 * torch.randn((len(env_ids), 3), device=self.device)
+        max_torque = self.noise_curriculum_weight[0] * 1.0
         self.external_torques[env_ids, 0, :] = torch.clip(self.external_torques[env_ids, 0, :], -max_torque, max_torque)
 
     def _push_robots(self):
