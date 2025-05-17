@@ -35,12 +35,22 @@
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
       <geometry>
-        <box size="0.5 0.5 0.2"/>
+        <cylinder radius="0.04" length="0.29"/>
       </geometry>
+      <origin xyz="0.37 0 0" rpy="0 0 0" />
+    </collision>
+    <collision>
+      <geometry>
+        <cylinder radius="0.04" length="0.29"/>
+      </geometry>
+      <origin xyz="-0.185 0.32 0" rpy="0 0 0" />
+    </collision>
+    <collision>
+      <geometry>
+        <cylinder radius="0.04" length="0.29"/>
+      </geometry>
+      <origin xyz="-0.185 -0.32 0" rpy="0 0 0" />
     </collision>
   </link>
   <link
@@ -172,12 +182,10 @@
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 -0.532"
-        rpy="0 0 0" /> 
       <geometry>
-        <sphere radius="0.033" />
+        <cylinder radius="0.033" length="1.064"/>
       </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0" />
     </collision>
   </link>
   <joint

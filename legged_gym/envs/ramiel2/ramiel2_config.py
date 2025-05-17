@@ -153,6 +153,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         tension_max = torch.tensor([400.0, 400.0, 400.0, 400.0, 400.0, 400.0])
         l_in_robot = torch.tensor([0.34, 0.34, 0.34, 0.34, 0.34, 0.34]) 
         pulley_radius = torch.tensor([0.01, 0.01, 0.01, 0.01, 0.01, 0.01]) # wire winding pulley radius[m]
+        replace_cylinder_with_capsule = True
 
     class domain_rand:
         randomize_friction = True
@@ -176,7 +177,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         soft_dof_vel_limit = 0.5
         soft_torque_limit = 0.8
         max_contact_force = 300.
-        only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
+        only_positive_rewards = False # if true negative total rewards are clipped at zero (avoids early termination problems)
         curriculum = True
         curriculum_offset = 0.01
         curriculum_decay = 0.9999
@@ -186,10 +187,10 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
             tracking_ang_vel = 0.5
             feet_air_time = 1.0
             action_rate = -0.05
-            orientation = -10.0
+            orientation = -1.0
             base_height_range = -10.0
             ang_vel_xyz = -0.01
-            joint_torques = -3.0e-4
+            joint_torques = -3.0e-5
             joint_dof_acc = -1.0e-4
             joint_dof_vel = -1.0e-2
             stumble = -3.0
@@ -240,5 +241,5 @@ class Ramiel2FlatCfgPPO( MonoLeggedRobotCfgPPO ):
         run_name = ''
         experiment_name = 'flat_ramiel2'
         num_steps_per_env = 48 # per iteration
-        max_iterations = 40000 # number of policy updates
+        max_iterations = 100000 # number of policy updates
 
