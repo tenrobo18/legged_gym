@@ -33,6 +33,8 @@ import torch
 from torch import Tensor
 
 enable_tendon = False
+# stage =  "first"
+stage = "second"
 
 class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
     class env(MonoLeggedRobotCfg.env):
@@ -165,9 +167,12 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         push_robots = True
         push_interval_s = 12.
         max_push_vel_xy = 0.5
-        curriculum = True
-        curriculum_offset = 0.01
-        curriculum_decay = 0.99997
+        if stage == "first":
+            curriculum = True
+            curriculum_offset = 0.01
+            curriculum_decay = 0.99997
+        elif stage == "second":
+            curriculum = False
         dynprm_range = [0.02, 0.06]
 
     class rewards( MonoLeggedRobotCfg.rewards ):
@@ -178,9 +183,12 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         soft_torque_limit = 0.8
         max_contact_force = 300.
         only_positive_rewards = False # if true negative total rewards are clipped at zero (avoids early termination problems)
-        curriculum = True
-        curriculum_offset = 0.01
-        curriculum_decay = 0.9999
+        if stage == "first":
+            curriculum = True
+            curriculum_offset = 0.01
+            curriculum_decay = 0.9999
+        elif stage == "second":
+            curriculum = False
         class scales( MonoLeggedRobotCfg.rewards.scales ):
             # termination = -200.0
             tracking_lin_vel = 1.0 # fix
@@ -203,9 +211,12 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
     class noise:
         add_noise = True
         noise_level = 1.0 # scales other values
-        curriculum = True
-        curriculum_offset = 0.01
-        curriculum_decay = 0.9999
+        if stage == "first":
+            curriculum = True
+            curriculum_offset = 0.01
+            curriculum_decay = 0.9999
+        elif stage == "second":
+            curriculum = False
         class noise_scales:
             dof_pos = 0.01
             dof_vel = 1.0
