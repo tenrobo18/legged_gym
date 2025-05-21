@@ -33,8 +33,8 @@ import torch
 from torch import Tensor
 
 enable_tendon = False
-# stage =  "first"
-stage = "second"
+stage =  "first"
+# stage = "second"
 
 class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
     class env(MonoLeggedRobotCfg.env):
@@ -176,7 +176,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         dynprm_range = [0.02, 0.06]
 
     class rewards( MonoLeggedRobotCfg.rewards ):
-        base_heightt_min = 0.5
+        base_height_min = 0.5
         base_height_max = 1.2
         soft_dof_pos_limit = 0.8
         soft_dof_vel_limit = 0.5
@@ -193,7 +193,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
             # termination = -200.0
             tracking_lin_vel = 1.0 # fix
             tracking_ang_vel = 0.5
-            feet_air_time = 1.0
+            feet_air_time = 3.0
             action_rate = -0.05
             orientation = -1.0
             base_height_range = -10.0
@@ -252,5 +252,5 @@ class Ramiel2FlatCfgPPO( MonoLeggedRobotCfgPPO ):
         run_name = ''
         experiment_name = 'flat_ramiel2'
         num_steps_per_env = 48 # per iteration
-        max_iterations = 100000 # number of policy updates
+        max_iterations = 200000 # number of policy updates
 
