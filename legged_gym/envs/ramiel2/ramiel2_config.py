@@ -163,10 +163,10 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         randomize_mass = True
         added_mass_rigid_body_indices = [0, 1, 2, 3]
         added_mass_rate = [0.1, 0.1, 0.1, 0.1]
-        com_range = [0.03, 0.0, 0.0, 0.0] #com randomization range [m]
+        com_range = [0.09, 0.0, 0.0, 0.0] #com randomization range [m]
         push_robots = True
-        push_interval_s = 12.
-        max_push_vel_xy = 0.5
+        push_interval_s = 4.
+        max_push_vel_xy = 1.0
         if stage == "first":
             curriculum = True
             curriculum_offset = 0.01
@@ -218,10 +218,10 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         elif stage == "second":
             curriculum = False
         class noise_scales:
-            dof_pos = 0.01
+            dof_pos = 0.02
             dof_vel = 1.0
-            lin_vel = 0.1
-            ang_vel = 0.15
+            lin_vel = 0.2
+            ang_vel = 0.3
             gravity = 0.05
             height_measurements = 0.1
 
