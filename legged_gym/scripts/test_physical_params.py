@@ -46,9 +46,21 @@ import matplotlib.pyplot as plt
 
 #params
 fixed = True
-log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_01_27_12_38_01_rl_parameter_mintension50N.csv"
-start_time = 55.
-end_time = 65.
+
+# slide joint log
+# log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_05_27_18_11_46_jointchirp_jointslide_10s_-0.2rad-0.2rad_2Hz-10Hz.csv"
+# start_time = 168.1
+# end_time = 178.
+
+#roll joint log
+# log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_05_27_18_28_04_jointchirp_jointroll_10s_-0.5rad-0.5rad_2Hz-10Hz.csv"
+# start_time = 59.1
+# end_time = 69.
+
+#pitch joint log
+log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_05_27_18_29_53_jointchirp_jointpitch_10s_-0.5rad-0.5rad_2Hz-10Hz.csv"
+start_time = 52.9
+end_time = 62.8
 
 class RecordedPolicy:
     def __init__(self, df_):
@@ -133,6 +145,7 @@ def play(args):
 
     # prepare environment
     env, _ = task_registry.make_env(name=args.task, args=args, env_cfg=env_cfg)
+    obs_scales = env_cfg.normalization.obs_scales
     obs = env.get_observations()
 
     # load data
@@ -175,6 +188,7 @@ def play(args):
                                                  gymtorch.unwrap_tensor(env.dof_state),
                                                  gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
             isaac_q_curs[i] = recorded_policy.q_curs[0]
+            isaac_dq_curs[i] = recorded_policy.dq_curs[0]
             
             #root linkの姿勢, 速度を調整
             pos_cur_tensor = torch.tensor(recorded_policy.pos_curs[0], device=env.device, dtype=env.dof_pos.dtype)
@@ -199,12 +213,13 @@ def play(args):
             actions = (recorded_actions_raw - env.default_dof_pos) / env_cfg.control.action_scale
             # actions[:] = 0.
             obs, _, rews, dones, infos = env.step(actions)
-            isaac_q_curs[i] = (obs[0, 12:15] + env.default_dof_pos.squeeze()).cpu().numpy()
+            isaac_q_curs[i] = (obs[0, 12:15] / obs_scales.dof_pos + env.default_dof_pos.squeeze()).cpu().numpy()
+            isaac_dq_curs[i] = (obs[0, 15:18] / obs_scales.dof_vel).cpu().numpy()
             isaac_tau_curs[i] = env.torques[0, :].detach().cpu().numpy()
             isaac_lin_vel_curs[i] = env.base_lin_vel[0, :].detach().cpu().numpy()
 
 
-    fig, axes = plt.subplots(nrows=3, ncols=3)
+    fig, axes = plt.subplots(nrows=4, ncols=3)
     for i in range(3):
         axes[0, i].title.set_text(f"q {i}")
         axes[0, i].plot(recorded_policy.times, recorded_policy.q_curs[:,i])
@@ -212,16 +227,21 @@ def play(args):
         axes[0, i].plot(time_array, isaac_q_curs[:,i])
         axes[0, i].legend(["q_cur", "q_ref", "q_cur_isaac"])
 
-        axes[1, i].title.set_text(f"tau{i}")
-        axes[1, i].plot(recorded_policy.times, recorded_policy.tau_curs[:,i])
-        axes[1, i].plot(recorded_policy.times, recorded_policy.tau_refs[:,i])
-        axes[1, i].plot(time_array, isaac_tau_curs[:,i])
-        axes[1, i].legend(["tau_cur", "tau_ref", "tau_cur_isaac"])   
+        axes[1, i].title.set_text(f"dq_cur{i}")
+        axes[1, i].plot(recorded_policy.times, recorded_policy.dq_curs[:,i])
+        axes[1, i].plot(time_array, isaac_dq_curs[:,i])
+        axes[1, i].legend(["dq_cur", "dq_cur_isaac"])
 
-        axes[2, i].title.set_text(f"lin_vel{i}")
-        axes[2, i].plot(recorded_policy.times, recorded_policy.lin_vel_curs[:,i])
-        axes[2, i].plot(time_array, isaac_lin_vel_curs[:,i])
-        axes[2, i].legend(["lin_vel_cur", "lin_vel_cur_isaac"])  
+        axes[2, i].title.set_text(f"tau{i}")
+        axes[2, i].plot(recorded_policy.times, recorded_policy.tau_curs[:,i])
+        axes[2, i].plot(recorded_policy.times, recorded_policy.tau_refs[:,i])
+        axes[2, i].plot(time_array, isaac_tau_curs[:,i])
+        axes[2, i].legend(["tau_cur", "tau_ref", "tau_cur_isaac"])   
+
+        axes[3, i].title.set_text(f"lin_vel{i}")
+        axes[3, i].plot(recorded_policy.times, recorded_policy.lin_vel_curs[:,i])
+        axes[3, i].plot(time_array, isaac_lin_vel_curs[:,i])
+        axes[3, i].legend(["lin_vel_cur", "lin_vel_cur_isaac"])  
     plt.show()
 
 

@@ -147,7 +147,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         terminate_after_contacts_on = ['base_link']
         flip_visual_attachments = False
         self_collisions = 1 # 1 to disable, 0 to enable...bitwise filter
-        dof_damping = {'motor_0': 0.05, 'motor_1': 0.05, 'motor_2': 0.05, 'motor_3': 0.05, 'motor_4': 0.05, 'motor_5': 0.05, 'roll': 2., 'pitch': 2., 'slide': 35.}
+        dof_damping = {'motor_0': 0.05, 'motor_1': 0.05, 'motor_2': 0.05, 'motor_3': 0.05, 'motor_4': 0.05, 'motor_5': 0.05, 'roll': 4., 'pitch': 8., 'slide': 100.}
         dof_friction = {'motor_0': 0., 'motor_1': 0., 'motor_2': 0., 'motor_3': 0., 'motor_4': 0., 'motor_5': 0., 'roll': 0.3, 'pitch': 0.3, 'slide': 4.}
         dof_armature = {'motor_0': 0., 'motor_1': 0., 'motor_2': 0., 'motor_3': 0., 'motor_4': 0., 'motor_5': 0., 'roll': 0.54811795, 'pitch': 0.54811064, 'slide': 9.51120847}
         dof_kind = {'motor_0' : 'motor', 'motor_1' : 'motor', 'motor_2' : 'motor', 'motor_3' : 'motor', 'motor_4' : 'motor', 'motor_5' : 'motor', 'roll' : 'joint', 'pitch' : 'joint', 'slide' : 'joint'}
@@ -165,8 +165,8 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         added_mass_rate = [0.1, 0.1, 0.1, 0.1]
         com_range = [0.09, 0.0, 0.0, 0.0] #com randomization range [m]
         push_robots = True
-        push_interval_s = 4.
-        max_push_vel_xy = 1.0
+        push_interval_s = 12.
+        max_push_vel_xy = 0.5
         if stage == "first":
             curriculum = True
             curriculum_offset = 0.01
@@ -193,7 +193,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
             # termination = -200.0
             tracking_lin_vel = 1.0 # fix
             tracking_ang_vel = 0.5
-            feet_air_time = 3.0
+            feet_air_time = 1.0
             action_rate = -0.05
             orientation = -1.0
             base_height_range = -10.0
@@ -218,10 +218,10 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         elif stage == "second":
             curriculum = False
         class noise_scales:
-            dof_pos = 0.02
+            dof_pos = 0.01
             dof_vel = 1.0
-            lin_vel = 0.2
-            ang_vel = 0.3
+            lin_vel = 0.1
+            ang_vel = 0.15
             gravity = 0.05
             height_measurements = 0.1
 
