@@ -163,7 +163,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         randomize_mass = True
         added_mass_rigid_body_indices = [0, 1, 2, 3]
         added_mass_rate = [0.1, 0.1, 0.1, 0.1]
-        com_range = [0.09, 0.0, 0.0, 0.0] #com randomization range [m]
+        com_range = [0.03, 0.0, 0.0, 0.0] #com randomization range [m]
         push_robots = True
         push_interval_s = 12.
         max_push_vel_xy = 0.5
