@@ -176,7 +176,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         dynprm_range = [0.02, 0.06]
 
     class rewards( MonoLeggedRobotCfg.rewards ):
-        base_height_min = 0.5
+        base_height_min = 0.
         base_height_max = 1.2
         soft_dof_pos_limit = 0.8
         soft_dof_vel_limit = 0.5
@@ -198,7 +198,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
             orientation = -1.0
             base_height_range = -10.0
             ang_vel_xyz = -0.01
-            joint_torques = -3.0e-5
+            joint_torques = -1.5e-5
             joint_dof_acc = -1.0e-4
             joint_dof_vel = -1.0e-2
             stumble = -3.0
