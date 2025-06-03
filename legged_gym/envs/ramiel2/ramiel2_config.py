@@ -193,7 +193,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
             # termination = -200.0
             tracking_lin_vel = 1.0 # fix
             tracking_ang_vel = 0.5
-            feet_air_time = 1.0
+            feet_air_time = 1.5
             action_rate = -0.05
             orientation = -1.0
             base_height_range = -10.0
