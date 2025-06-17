@@ -43,6 +43,8 @@ from .mevius.mevius import Mevius
 from .mevius.mevius_config import MeviusFlatCfg, MeviusFlatCfgPPO
 from .ramiel2.ramiel2 import Ramiel2
 from .ramiel2.ramiel2_config import Ramiel2FlatCfg, Ramiel2FlatCfgPPO
+from .ramiel2.ramiel2_flip import Ramiel2Flip
+from .ramiel2.ramiel2_flip_config import Ramiel2FlipCfg, Ramiel2FlipCfgPPO
 
 
 import os
@@ -56,3 +58,4 @@ task_registry.register( "a1", LeggedRobot, A1RoughCfg(), A1RoughCfgPPO() )
 task_registry.register( "cassie", Cassie, CassieRoughCfg(), CassieRoughCfgPPO() )
 task_registry.register( "mevius", Mevius, MeviusFlatCfg(), MeviusFlatCfgPPO() )
 task_registry.register( "ramiel2", Ramiel2, Ramiel2FlatCfg(), Ramiel2FlatCfgPPO() )
+task_registry.register( "ramiel2_flip", Ramiel2, Ramiel2FlipCfg(), Ramiel2FlipCfgPPO() )

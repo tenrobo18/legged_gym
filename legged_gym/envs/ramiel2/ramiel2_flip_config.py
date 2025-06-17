@@ -36,7 +36,7 @@ enable_tendon = False
 stage =  "first"
 # stage = "second"
 
-class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
+class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
     class env(MonoLeggedRobotCfg.env):
         MonoLeggedRobotCfg.env.enable_tendon = enable_tendon
         num_envs = 2048
@@ -226,7 +226,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
             height_measurements = 0.1
 
 
-class Ramiel2FlatCfgPPO( MonoLeggedRobotCfgPPO ):
+class Ramiel2FlipCfgPPO( MonoLeggedRobotCfgPPO ):
     seed = 1
     # runner_class_name = 'ActorCriticReccurent'
     # class policy:
@@ -250,7 +250,7 @@ class Ramiel2FlatCfgPPO( MonoLeggedRobotCfgPPO ):
 
     class runner( MonoLeggedRobotCfgPPO.runner ):
         run_name = ''
-        experiment_name = 'flat_ramiel2'
+        experiment_name = 'flip_ramiel2'
         num_steps_per_env = 48 # per iteration
         max_iterations = 200000 # number of policy updates
 
