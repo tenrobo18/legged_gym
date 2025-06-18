@@ -41,11 +41,11 @@ class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
         MonoLeggedRobotCfg.env.enable_tendon = enable_tendon
         num_envs = 2048
         if enable_tendon:
-            num_observations = 6 * 2 + 18 + 1
-            num_privileged_obs = 6 * 3 + 18 + 1 + 16
+            num_observations = 6 * 2 + 19 + 1
+            num_privileged_obs = 6 * 3 + 19 + 1 + 16
         else: 
-            num_observations = 18 + 1
-            num_privileged_obs = 18 + 1 + 16
+            num_observations = 19 + 1
+            num_privileged_obs = 19 + 1 + 16
         # num_observations = 169
         num_actions = 3
 
@@ -106,7 +106,7 @@ class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
     class commands:
         curriculum = False
         max_curriculum = 1.
-        num_commands = 4 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
+        num_commands = 5 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 7. # time before command are changed[s]
         heading_command = False # if true: compute ang vel command from heading error
         delay_range = [0.01, 0.04]
@@ -115,6 +115,7 @@ class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
             lin_vel_y = [-0.8, 0.8]   # min max [m/s]
             ang_vel_yaw = [-1.2, 1.2]    # min max [rad/s]
             heading = [-3.14, 3.14]
+            half_turns_times_diff = [-1., 1.] # min max roboto half turns times per single resample command 
 
     class control( MonoLeggedRobotCfg.control ):
         # PD Drive parameters:
@@ -207,6 +208,17 @@ class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
             joint_torque_limits = -1e-3
             collision = -1.0
             foot_slippage = -0.1
+
+    class normalization:
+        class obs_scales:
+            lin_vel = 2.0
+            ang_vel = 0.25
+            dof_pos = 1.0
+            dof_vel = 0.05
+            height_measurements = 5.0
+            half_turns_times_diff = 1.0
+        clip_observations = 100.
+        clip_actions = 100.
 
     class noise:
         add_noise = True
