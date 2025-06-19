@@ -99,7 +99,7 @@ class Ramiel2Flip(MonoLeggedRobot):
         self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["lin_vel_y"][0], self.command_ranges["lin_vel_y"][1], (len(env_ids), 1), device=self.device).squeeze(1)
         self.commands[env_ids, 2] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0], self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1), device=self.device).squeeze(1)
         self.commands[env_ids, 3] = torch_rand_float(self.command_ranges["heading"][0], self.command_ranges["heading"][1], (len(env_ids), 1), device=self.device).squeeze(1)
-        self.commands[env_ids, 4] = torch_rand_float(self.command_ranges["half_turns_times_diff"][0], self.command_ranges["half_turns_times_diff"][1], (len(env_ids), 1), device=self.device).squeeze(1) + self.commands[env_ids, 4]
+        self.commands[env_ids, 4] =  self.commands[env_ids, 4] + torch_rand_float(self.command_ranges["half_turns_times_diff"][0], self.command_ranges["half_turns_times_diff"][1], (len(env_ids), 1), device=self.device).squeeze(1)
 
         r = torch.empty(len(env_ids), device=self.device)
 
@@ -117,11 +117,8 @@ class Ramiel2Flip(MonoLeggedRobot):
 
         self.is_heading[env_ids] = (r.uniform_(0.0, 1.0) <= 0.5).float().reshape(-1, 1)
 
-        #add (int) half_turns_times_diff to half_turns_times
-        self.half_turns_times[env_ids] += self.commands[env_ids, 4].to(torch.int)
-
         # set top-up commands true, if (int) half_turns_time is even number
-        self.is_top_up_command[env_ids] = (self.half_turns_times[env_ids] % 2 == 0)
+        self.is_top_up_command[env_ids] = (self.commands[env_ids, 4].to(torch.int) % 2 == 0)
 
     def _reset_root_states(self, env_ids):
         """ Resets ROOT states position and velocities of selected environmments
@@ -161,7 +158,7 @@ class Ramiel2Flip(MonoLeggedRobot):
                                                      gymtorch.unwrap_tensor(self.root_states),
                                                      gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
         # reset half turns times
-        self.half_turns_times[env_ids] = 0 
+        self.commands[env_ids, 4] = 0 
         self.is_top_up_command[env_ids] = True
 
     def _get_noise_scale_vec(self, cfg):
@@ -239,7 +236,6 @@ class Ramiel2Flip(MonoLeggedRobot):
         self.last_root_vel = torch.zeros_like(self.root_states[:, 7:13])
         self.commands = torch.zeros(self.num_envs, self.cfg.commands.num_commands, dtype=torch.float, device=self.device, requires_grad=False) # x vel, y vel, yaw vel, heading
         self.commands_scale = torch.tensor([self.obs_scales.lin_vel, self.obs_scales.lin_vel, self.obs_scales.ang_vel, self.obs_scales.half_turns_times_diff], device=self.device, requires_grad=False,) # TODO change this
-        self.half_turns_times = torch.zeros(self.num_envs, dtype=torch.int, device=self.device, requires_grad=False) # used to track the number of half turns
         self.is_top_up_command = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
         self.reward_curriculum_weight = torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
         if self.cfg.rewards.curriculum:
