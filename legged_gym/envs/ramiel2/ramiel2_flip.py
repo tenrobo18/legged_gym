@@ -99,7 +99,7 @@ class Ramiel2Flip(MonoLeggedRobot):
         self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["lin_vel_y"][0], self.command_ranges["lin_vel_y"][1], (len(env_ids), 1), device=self.device).squeeze(1)
         self.commands[env_ids, 2] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0], self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1), device=self.device).squeeze(1)
         self.commands[env_ids, 3] = torch_rand_float(self.command_ranges["heading"][0], self.command_ranges["heading"][1], (len(env_ids), 1), device=self.device).squeeze(1)
-        self.commands[env_ids, 4] =  self.commands[env_ids, 4] + torch_rand_float(self.command_ranges["half_turns_times_diff"][0], self.command_ranges["half_turns_times_diff"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+        self.commands[env_ids, 4] = self.commands[env_ids, 4] + torch_rand_float(self.command_ranges["half_turns_times_diff"][0], self.command_ranges["half_turns_times_diff"][1], (len(env_ids), 1), device=self.device).squeeze(1)
 
         r = torch.empty(len(env_ids), device=self.device)
 
@@ -295,3 +295,10 @@ class Ramiel2Flip(MonoLeggedRobot):
         self.tension_ref_history = torch.zeros((self.num_envs, len(self.motor_idx), self.cfg.control.tension_cur_net.input_steps), dtype=torch.float, device=self.device, requires_grad=False)
         self.tendon_strain_history = torch.zeros((self.num_envs, len(self.motor_idx), self.cfg.control.tension_cur_net.input_steps), dtype=torch.float, device=self.device, requires_grad=False)
         self.tendon_vel_motor_history = torch.zeros((self.num_envs, len(self.motor_idx), self.cfg.control.tension_cur_net.input_steps), dtype=torch.float, device=self.device, requires_grad=False)
+
+    def _reward_orientation(self):
+        # Penalize difference between the reference and current projected gravity
+        projected_gravity_ref = torch.zeros_like(self.projected_gravity)
+        # if the command is a top-up command, the reference projected gravity is -1 in z direction, else the reference projected gravity is 1 in z direction
+        projected_gravity_ref[:, 2] = torch.where(self.is_top_up_command, -1.0, 1.0)
+        return torch.sum(torch.square(self.projected_gravity - projected_gravity_ref), dim=1)
