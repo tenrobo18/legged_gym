@@ -296,9 +296,10 @@ class Ramiel2Flip(MonoLeggedRobot):
         self.tendon_strain_history = torch.zeros((self.num_envs, len(self.motor_idx), self.cfg.control.tension_cur_net.input_steps), dtype=torch.float, device=self.device, requires_grad=False)
         self.tendon_vel_motor_history = torch.zeros((self.num_envs, len(self.motor_idx), self.cfg.control.tension_cur_net.input_steps), dtype=torch.float, device=self.device, requires_grad=False)
 
-    def _reward_orientation(self):
+    def _reward_orientation_flip(self):
         # Penalize difference between the reference and current projected gravity
         projected_gravity_ref = torch.zeros_like(self.projected_gravity)
         # if the command is a top-up command, the reference projected gravity is -1 in z direction, else the reference projected gravity is 1 in z direction
         projected_gravity_ref[:, 2] = torch.where(self.is_top_up_command, -1.0, 1.0)
         return torch.sum(torch.square(self.projected_gravity - projected_gravity_ref), dim=1)
+    
