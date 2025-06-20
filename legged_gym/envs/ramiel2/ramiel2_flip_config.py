@@ -196,7 +196,12 @@ class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
             tracking_ang_vel = 0.5
             feet_air_time = 1.0
             action_rate = -0.05
-            orientation = -1.0
+            if stage == "first":
+                orientation = -1.0
+                orientation_flip = 0.
+            if stage == "second":
+                orientation = 0.
+                orientation_flip = -1.0
             base_height_range = -10.0
             ang_vel_xyz = -0.01
             joint_torques = -1.5e-5
