@@ -42,10 +42,10 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         num_envs = 2048
         if enable_tendon:
             num_observations = 6 * 2 + 18 + 1
-            num_privileged_obs = 6 * 3 + 18 + 1 + 16
+            num_privileged_obs = 6 * 3 + 18 + 1 + 16 + 121
         else: 
             num_observations = 18 + 1
-            num_privileged_obs = 18 + 1 + 16
+            num_privileged_obs = 18 + 1 + 16 + 121
         # num_observations = 169
         num_actions = 3
 
@@ -66,8 +66,8 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         dynamic_friction = 1.0
         restitution = 0.
         # rough terrain only:
-        measure_heights = False
-        measured_points_x = [-0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8] # 1mx1.6m rectangle (without center line)
+        measure_heights = True
+        measured_points_x = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5] # 1mx1.6m rectangle (without center line)
         measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]
         selected = False # select a unique terrain type and pass all arguments
         terrain_kwargs = None # Dict of arguments for selected terrain
@@ -186,7 +186,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         if stage == "first":
             curriculum = True
             curriculum_offset = 0.01
-            curriculum_decay = 0.9999
+            curriculum_decay = 0.99993
         elif stage == "second":
             curriculum = False
         class scales( MonoLeggedRobotCfg.rewards.scales ):
@@ -207,6 +207,16 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
             joint_torque_limits = -1e-3
             collision = -1.0
             foot_slippage = -0.1
+    
+    class normalization:
+        class obs_scales:
+            lin_vel = 2.0
+            ang_vel = 0.25
+            dof_pos = 1.0
+            dof_vel = 0.05
+            height_measurements = 1.0
+        clip_observations = 100.
+        clip_actions = 100.
 
     class noise:
         add_noise = True
@@ -214,7 +224,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         if stage == "first":
             curriculum = True
             curriculum_offset = 0.01
-            curriculum_decay = 0.9999
+            curriculum_decay = 0.99997
         elif stage == "second":
             curriculum = False
         class noise_scales:

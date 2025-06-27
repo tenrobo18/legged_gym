@@ -306,6 +306,10 @@ class MonoLeggedRobot(BaseTask):
                                     self.is_standing,
                                     # self.last_actions,
                                     ),dim=-1)
+        
+        if self.cfg.terrain.measure_heights:
+            heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements
+        
         self.privileged_obs_buf = torch.cat((  self.base_lin_vel * self.obs_scales.lin_vel,
                                                self.base_ang_vel  * self.obs_scales.ang_vel,
                                                self.projected_gravity,
@@ -320,12 +324,9 @@ class MonoLeggedRobot(BaseTask):
                                                self.root_states[:, 3:7],
                                                self.root_states[:, 7:10],
                                                self.root_states[:, 10:13],
+                                               heights, #121
                                                ),dim=-1)
-        # print(self.obs_buf.cpu().numpy()[0])
-        # add perceptive inputs if not blind
-        if self.cfg.terrain.measure_heights:
-            heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements
-            self.obs_buf = torch.cat((self.obs_buf, heights), dim=-1)
+
         # add noise if needed
         if self.add_noise:
             self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec * self.noise_curriculum_weight[0]
