@@ -306,9 +306,9 @@ class MonoLeggedRobot(BaseTask):
                                     self.is_standing,
                                     # self.last_actions,
                                     ),dim=-1)
-        
         if self.cfg.terrain.measure_heights:
             heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements
+            self.obs_buf = torch.cat((self.obs_buf, heights), dim=-1)
         
         self.privileged_obs_buf = torch.cat((  self.base_lin_vel * self.obs_scales.lin_vel,
                                                self.base_ang_vel  * self.obs_scales.ang_vel,
@@ -324,8 +324,11 @@ class MonoLeggedRobot(BaseTask):
                                                self.root_states[:, 3:7],
                                                self.root_states[:, 7:10],
                                                self.root_states[:, 10:13],
-                                               heights, #121
                                                ),dim=-1)
+        
+        if self.cfg.terrain.measure_heights:
+            heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements
+            self.privileged_obs_buf = torch.cat((self.privileged_obs_buf, heights), dim=-1)
 
         # add noise if needed
         if self.add_noise:
@@ -753,6 +756,16 @@ class MonoLeggedRobot(BaseTask):
         move_down = avg_tracking_error > 0.5
         move_down *= ~move_up
         self.terrain_levels[env_ids] += 1 * move_up - 1 * move_down
+
+        # Identify environments where the terrain level is at or below the initial max and we need to move down
+        low_init = self.terrain_levels[env_ids] <= self.cfg.terrain.max_init_terrain_level
+        rand_down = move_down & low_init
+
+        # For those environments, randomize the terrain level between 0 and max_init_terrain_level inclusive
+        self.terrain_levels[env_ids] = torch.where(rand_down, 
+                                                   torch.randint_like(self.terrain_levels[env_ids], self.cfg.terrain.max_init_terrain_level + 1),
+                                                   self.terrain_levels[env_ids])
+        
         self.terrain_levels[env_ids] = torch.where(self.terrain_levels[env_ids]>=self.max_terrain_level,
                                                    torch.randint_like(self.terrain_levels[env_ids], self.max_terrain_level),
                                                    torch.clip(self.terrain_levels[env_ids], 0)) # (the minumum level is zero)
