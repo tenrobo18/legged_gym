@@ -33,9 +33,9 @@ import torch
 from torch import Tensor
 
 enable_tendon = False
-# stage =  "first"
+stage =  "first"
 # stage = "second"
-stage = "flip"
+# stage = "flip"
 
 class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
     class env(MonoLeggedRobotCfg.env):
@@ -108,7 +108,12 @@ class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
         curriculum = False
         max_curriculum = 1.
         num_commands = 5 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
-        resampling_time = 7. # time before command are changed[s]
+        if stage == "first":
+            resampling_time = 7. # time before command are changed[s]
+        elif stage == "second":
+            resampling_time = 7.
+        elif stage == "flip":
+            resampling_time = 3.
         heading_command = False # if true: compute ang vel command from heading error
         delay_range = [0.01, 0.04]
         class ranges:
@@ -169,12 +174,16 @@ class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
         push_robots = True
         push_interval_s = 12.
         max_push_vel_xy = 0.5
-        if stage == "first" or stage == "flip":
+        if stage == "first" :
             curriculum = True
             curriculum_offset = 0.01
             curriculum_decay = 0.99997
         elif stage == "second":
             curriculum = False
+        elif stage == "flip":
+            curriculum = True
+            curriculum_offset = 0.01
+            curriculum_decay = 0.99997
         dynprm_range = [0.02, 0.06]
 
     class rewards( MonoLeggedRobotCfg.rewards ):
@@ -185,12 +194,16 @@ class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
         soft_torque_limit = 0.8
         max_contact_force = 300.
         only_positive_rewards = False # if true negative total rewards are clipped at zero (avoids early termination problems)
-        if stage == "first" or stage == "flip":
+        if stage == "first":
+            curriculum = True
+            curriculum_offset = 0.01
+            curriculum_decay = 0.99996
+        elif stage == "second":
+            curriculum = False
+        elif stage == "flip":
             curriculum = True
             curriculum_offset = 0.01
             curriculum_decay = 0.9999
-        elif stage == "second":
-            curriculum = False
         class scales( MonoLeggedRobotCfg.rewards.scales ):
             # termination = -200.0
             tracking_lin_vel = 1.0 # fix
@@ -200,7 +213,10 @@ class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
             if stage == "first":
                 orientation = -1.0
                 orientation_flip = 0.
-            if stage == "second" or stage == "flip":
+            elif stage == "second":
+                orientation = 0.
+                orientation_flip = -1.0
+            elif stage == "flip":
                 orientation = 0.
                 orientation_flip = -1.0
             base_height_range = -10.0
@@ -232,9 +248,13 @@ class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
         if stage == "first" or stage == "flip":
             curriculum = True
             curriculum_offset = 0.01
-            curriculum_decay = 0.9999
+            curriculum_decay = 0.99999
         elif stage == "second":
             curriculum = False
+        elif stage == "flip":
+            curriculum = True
+            curriculum_offset = 0.01
+            curriculum_decay = 0.9999
         class noise_scales:
             dof_pos = 0.01
             dof_vel = 1.0

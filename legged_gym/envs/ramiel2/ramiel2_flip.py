@@ -139,8 +139,12 @@ class Ramiel2Flip(MonoLeggedRobot):
             self.root_states[env_ids, :3] += self.env_origins[env_ids]
         # base quaternion
         roll = torch.empty(len(env_ids), device=self.device).uniform_(-0.1, 0.1)
-        pitch = torch.empty(len(env_ids), device=self.device).uniform_(-0.1, 0.1)
         yaw = torch.empty(len(env_ids), device=self.device).uniform_(-3.14, 3.14)
+        pitch = torch.empty(len(env_ids), device=self.device)
+        mask = torch.randint(0, 2, (len(env_ids),), device=self.device, dtype=torch.bool) # select randomly whether to use small or large pitch values
+        pitch[mask] = torch.empty(mask.sum(), device=self.device).uniform_(-0.1, 0.1) # small pitch values [-0.1, 0.1]
+        pitch[~mask] = torch.empty((~mask).sum(), device=self.device).uniform_(np.pi - 0.1, np.pi + 0.1) # large pitch values [pi-0.1, pi+0.1]
+
         self.root_states[env_ids, 3:7] = quat_mul(quat_from_euler_xyz(roll, pitch, yaw), self.root_states[env_ids, 3:7])
         # base velocities
         lin_vel_z_min = torch.full((len(env_ids),), -0.5, device=self.device)
@@ -160,6 +164,54 @@ class Ramiel2Flip(MonoLeggedRobot):
         # reset half turns times
         self.commands[env_ids, 4] = 0 
         self.is_top_up_command[env_ids] = True
+
+
+    def _update_terrain_curriculum(self, env_ids):
+        """ Implements the game-inspired curriculum.
+
+        Args:
+            env_ids (List[int]): ids of environments being reset
+        """
+        # Implement Terrain curriculum
+        if not self.init_done:
+            # don't change on initial reset
+            return
+        # distance = torch.norm(self.root_states[env_ids, :2] - self.env_origins[env_ids, :2], dim=1)
+        # # robots that walked far enough progress to harder terains
+        # move_up = distance > self.terrain.env_length / 2.0
+        # # robots that walked less than half of their required distance go to simpler terrains
+        # move_down = (distance < torch.norm(self.commands[env_ids, :2], dim=1)*self.max_episode_length_s*0.5) * ~move_up
+        # self.terrain_levels[env_ids] += 1 * move_up - 1 * move_down
+        # # Robots that solve the last level are sent to a random one
+        # self.terrain_levels[env_ids] = torch.where(self.terrain_levels[env_ids]>=self.max_terrain_level,
+        #                                            torch.randint_like(self.terrain_levels[env_ids], self.max_terrain_level),
+        #                                            torch.clip(self.terrain_levels[env_ids], 0)) # (the minumum level is zero)
+        # self.env_origins[env_ids] = self.terrain_origins[self.terrain_levels[env_ids], self.terrain_types[env_ids]]
+
+        avg_tracking_error = (
+            torch.sum(self.tracking_error_sum[env_ids, :], dim=1)
+            / self.step_counter[env_ids]
+            / 3
+        )
+        move_up = avg_tracking_error < 0.10
+        move_down = avg_tracking_error > 0.5
+        move_down *= ~move_up
+        self.terrain_levels[env_ids] += 1 * move_up - 1 * move_down
+
+        # Identify environments where the terrain level is at or below the initial max and we need to move down
+        # low_init = self.terrain_levels[env_ids] <= self.cfg.terrain.max_init_terrain_level
+        # rand_down = move_down & low_init
+
+        # For those environments, randomize the terrain level between 0 and max_init_terrain_level inclusive
+        # self.terrain_levels[env_ids] = torch.where(rand_down, 
+        #                                            torch.randint_like(self.terrain_levels[env_ids], self.cfg.terrain.max_init_terrain_level + 1),
+        #                                            self.terrain_levels[env_ids])
+        
+        self.terrain_levels[env_ids] = torch.where(self.terrain_levels[env_ids]>=self.max_terrain_level,
+                                                   torch.randint_like(self.terrain_levels[env_ids], self.max_terrain_level),
+                                                   torch.clip(self.terrain_levels[env_ids], 0)) # (the minumum level is zero)
+        self.env_origins[env_ids] = self.terrain_origins[self.terrain_levels[env_ids], self.terrain_types[env_ids]]
+
 
     def _get_noise_scale_vec(self, cfg):
         """ Sets a vector used to scale the noise added to the observations.
