@@ -87,7 +87,7 @@ class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
         default_joint_angles = { # = target angles [rad] when action = 0.0
             'roll': 0.0,
             'pitch': 0.0,
-            'slide': -0.2,
+            'slide': 0.0,
             'motor_0': 0.0,
             'motor_1': 0.0,
             'motor_2': 0.0,
