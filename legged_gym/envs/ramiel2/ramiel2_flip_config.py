@@ -201,7 +201,7 @@ class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
         elif stage == "second":
             curriculum = False
         elif stage == "flip":
-            curriculum = True
+            curriculum = False
             curriculum_offset = 0.01
             curriculum_decay = 0.9999
         class scales( MonoLeggedRobotCfg.rewards.scales ):
@@ -251,10 +251,6 @@ class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
             curriculum_decay = 0.99999
         elif stage == "second":
             curriculum = False
-        elif stage == "flip":
-            curriculum = True
-            curriculum_offset = 0.01
-            curriculum_decay = 0.9999
         class noise_scales:
             dof_pos = 0.01
             dof_vel = 1.0

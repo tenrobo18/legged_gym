@@ -40,6 +40,49 @@ from typing import Tuple, Dict
 from legged_gym.envs import MonoLeggedRobot
 
 class Ramiel2Flip(MonoLeggedRobot):
+    def post_physics_step(self):
+        """ check terminations, compute observations and rewards
+            calls self._post_physics_step_callback() for common computations 
+            calls self._draw_debug_vis() if needed
+        """
+        self.gym.refresh_actor_root_state_tensor(self.sim)
+        self.gym.refresh_net_contact_force_tensor(self.sim)
+
+        self.episode_length_buf += 1
+        self.common_step_counter += 1
+
+        # prepare quantities
+        self.base_quat[:] = self.root_states[:, 3:7]
+        self.base_lin_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
+        self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
+        self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
+        # print(self.base_quat.cpu().numpy()[0])
+        # print(self.base_lin_vel.cpu().numpy()[0])
+        # print(self.base_ang_vel.cpu().numpy()[0])
+        # print(self.projected_gravity.cpu().numpy()[0])
+
+        self._post_physics_step_callback()
+
+        # compute observations, rewards, resets, ...
+        self.non_flipping_score = 1.0 - 0.25 * torch.sum(torch.square(self.projected_gravity - self.projected_gravity_ref), dim=1) #when flipping: this will be 0, when not flipping: this will be 1
+        print(f"non_flipping_score: {self.non_flipping_score.cpu().numpy()}")
+        self.check_termination()
+        self.compute_reward()
+        env_ids = self.reset_buf.nonzero(as_tuple=False).flatten()
+        self.reset_idx(env_ids)
+        self.compute_observations() # in some cases a simulation step might be required to refresh some obs (for example body positions)
+
+        self.last_last_actions[:] = self.last_actions[:]
+        self.last_actions[:] = self.actions[:]
+        self.last_dof_vel[:] = self.dof_vel[:]
+        self.last_root_vel[:] = self.root_states[:, 7:13]
+        self.tracking_error_sum[:, :2] += torch.abs(self.commands[:, :2] - self.base_lin_vel[:, :2])
+        self.tracking_error_sum[:, 2] += torch.abs(self.commands[:, 2] - self.base_ang_vel[:, 2])
+        self.step_counter += 1
+
+        if self.viewer and self.enable_viewer_sync and self.debug_viz:
+            self._draw_debug_vis()
+
     def compute_observations(self):
         """ Computes observations
         """
@@ -119,6 +162,7 @@ class Ramiel2Flip(MonoLeggedRobot):
 
         # set top-up commands true, if (int) half_turns_time is even number
         self.is_top_up_command[env_ids] = (self.commands[env_ids, 4].to(torch.int) % 2 == 0)
+        self.projected_gravity_ref[env_ids, 2] = torch.where(self.is_top_up_command[env_ids], -1.0, 1.0)
 
     def _reset_root_states(self, env_ids):
         """ Resets ROOT states position and velocities of selected environmments
@@ -163,7 +207,9 @@ class Ramiel2Flip(MonoLeggedRobot):
                                                      gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
         # reset half turns times
         self.commands[env_ids, 4] = 0 
-        self.is_top_up_command[env_ids] = True
+        self.is_top_up_command[env_ids[mask]] = True
+        self.is_top_up_command[env_ids[~mask]] = False
+        self.projected_gravity_ref[env_ids, 2] = torch.where(self.is_top_up_command[env_ids], -1.0, 1.0)
 
 
     def _update_terrain_curriculum(self, env_ids):
@@ -303,11 +349,14 @@ class Ramiel2Flip(MonoLeggedRobot):
         self.base_lin_vel = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
         self.base_ang_vel = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
         self.projected_gravity = quat_rotate_inverse(self.base_quat, self.gravity_vec)
+        self.projected_gravity_ref = torch.zeros_like(self.projected_gravity)
+        self.projected_gravity_ref[:, 2] = torch.where(self.is_top_up_command, -1.0, 1.0)
         self.height_points = self._init_height_points()
         self.measured_heights = 0
         self.is_standing = torch.ones(self.num_envs, 1, dtype=torch.float, device=self.device, requires_grad=False)
         self.is_heading = torch.zeros(self.num_envs, 1, dtype=torch.float, device=self.device, requires_grad=False)
         self.tracking_error_sum = torch.zeros(self.num_envs, self.cfg.commands.num_commands, device=self.device, requires_grad=False)
+        self.non_flipping_score = torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
 
         # joint positions offsets and PD gains
         self.default_dof_pos = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
@@ -348,10 +397,54 @@ class Ramiel2Flip(MonoLeggedRobot):
         self.tendon_strain_history = torch.zeros((self.num_envs, len(self.motor_idx), self.cfg.control.tension_cur_net.input_steps), dtype=torch.float, device=self.device, requires_grad=False)
         self.tendon_vel_motor_history = torch.zeros((self.num_envs, len(self.motor_idx), self.cfg.control.tension_cur_net.input_steps), dtype=torch.float, device=self.device, requires_grad=False)
 
+    #------------ reward functions for flipping---------------- 
     def _reward_orientation_flip(self):
         # Penalize difference between the reference and current projected gravity
-        projected_gravity_ref = torch.zeros_like(self.projected_gravity)
-        # if the command is a top-up command, the reference projected gravity is -1 in z direction, else the reference projected gravity is 1 in z direction
-        projected_gravity_ref[:, 2] = torch.where(self.is_top_up_command, -1.0, 1.0)
-        return torch.sum(torch.square(self.projected_gravity - projected_gravity_ref), dim=1)
+        return torch.sum(torch.square(self.projected_gravity - self.projected_gravity_ref), dim=1)
     
+    #------------ reward functions for hopping---------------- 
+    def _reward_ang_vel_xyz(self):
+        # Penalize xy axes base angular velocity
+        return self.non_flipping_score * torch.sum(torch.square(self.base_ang_vel[:, :3]), dim=1)
+
+    def _reward_base_height_range(self):
+        # Penalize base height if it is outside the range [base_height_min, base_height_max].
+        # Calculate the base height
+        base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
+
+        # Define minimum and maximum target heights
+        base_height_min = self.cfg.rewards.base_height_min
+        base_height_max = self.cfg.rewards.base_height_max
+
+        # Calculate penalties for being outside the range
+        penalty_below = torch.where(base_height < base_height_min, base_height_min - base_height, torch.zeros_like(base_height))
+        penalty_above = torch.where(base_height > base_height_max, base_height - base_height_max, torch.zeros_like(base_height))
+
+        #return the square of the deviation
+        return self.non_flipping_score * (torch.square(penalty_below) + torch.square(penalty_above))
+
+    def _reward_tracking_lin_vel(self):
+        # Tracking of linear velocity commands (xy axes)
+        lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
+        return self.non_flipping_score * torch.exp(-lin_vel_error/self.cfg.rewards.tracking_sigma)
+
+    def _reward_tracking_ang_vel(self):
+        # Tracking of angular velocity commands (yaw) 
+        ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
+        return self.non_flipping_score * torch.exp(-ang_vel_error/self.cfg.rewards.tracking_sigma)
+
+    def _reward_feet_air_time(self):
+        time_threshold = 0.5
+        air_time_diff = self.feet_air_time - time_threshold
+        zero_reward = torch.zeros_like(air_time_diff)
+        each_reward = torch.where(air_time_diff > 0, -0.1*torch.ones_like(air_time_diff), self.feet_air_time)
+        reward = torch.sum(each_reward, dim=1)
+        # print(self.feet_air_time[0].cpu().numpy(), reward[0].cpu().numpy())
+
+        contact = self.contact_forces[:, self.feet_indices, 2] > 1.
+        contact_filt = torch.logical_or(contact, self.last_contacts)
+        self.last_contacts = contact
+        first_contact = (self.feet_air_time > 0.) * contact_filt
+        self.feet_air_time += self.dt
+        self.feet_air_time *= ~contact_filt
+        return self.non_flipping_score * reward * ~(self.is_standing > 0.5).flatten()
