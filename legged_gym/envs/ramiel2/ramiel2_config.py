@@ -77,7 +77,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         num_rows= 15 # number of terrain rows (levels)
         num_cols = 25 # number of terrain cols (types)
         # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete]
-        terrain_proportions = [0.15, 0.15, 0.35, 0.15, 0.2]
+        terrain_proportions = [1., 0., 0., 0., 0.]
         # trimesh only:
         slope_treshold = 0.75 # slopes above this threshold will be corrected to vertical surfaces
 
@@ -186,7 +186,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         if stage == "first":
             curriculum = True
             curriculum_offset = 0.01
-            curriculum_decay = 0.99993
+            curriculum_decay = 0.99996
         elif stage == "second":
             curriculum = False
         class scales( MonoLeggedRobotCfg.rewards.scales ):
@@ -224,7 +224,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         if stage == "first":
             curriculum = True
             curriculum_offset = 0.01
-            curriculum_decay = 0.99997
+            curriculum_decay = 0.99999
         elif stage == "second":
             curriculum = False
         class noise_scales:

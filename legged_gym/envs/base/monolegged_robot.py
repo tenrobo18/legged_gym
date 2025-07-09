@@ -753,18 +753,18 @@ class MonoLeggedRobot(BaseTask):
             / 3
         )
         move_up = avg_tracking_error < 0.10
-        move_down = avg_tracking_error > 0.5
+        move_down = avg_tracking_error > 2.5
         move_down *= ~move_up
         self.terrain_levels[env_ids] += 1 * move_up - 1 * move_down
 
         # Identify environments where the terrain level is at or below the initial max and we need to move down
-        low_init = self.terrain_levels[env_ids] <= self.cfg.terrain.max_init_terrain_level
-        rand_down = move_down & low_init
+        # low_init = self.terrain_levels[env_ids] <= self.cfg.terrain.max_init_terrain_level
+        # rand_down = move_down & low_init
 
         # For those environments, randomize the terrain level between 0 and max_init_terrain_level inclusive
-        self.terrain_levels[env_ids] = torch.where(rand_down, 
-                                                   torch.randint_like(self.terrain_levels[env_ids], self.cfg.terrain.max_init_terrain_level + 1),
-                                                   self.terrain_levels[env_ids])
+        # self.terrain_levels[env_ids] = torch.where(rand_down, 
+        #                                            torch.randint_like(self.terrain_levels[env_ids], self.cfg.terrain.max_init_terrain_level + 1),
+        #                                            self.terrain_levels[env_ids])
         
         self.terrain_levels[env_ids] = torch.where(self.terrain_levels[env_ids]>=self.max_terrain_level,
                                                    torch.randint_like(self.terrain_levels[env_ids], self.max_terrain_level),
