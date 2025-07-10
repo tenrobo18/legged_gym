@@ -28,6 +28,7 @@
 #
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
+from legged_gym import LEGGED_GYM_ROOT_DIR, envs
 from time import time
 import numpy as np
 import os
@@ -38,6 +39,7 @@ from isaacgym import gymtorch, gymapi, gymutil
 import torch
 from typing import Tuple, Dict
 from legged_gym.envs import MonoLeggedRobot
+from legged_gym.envs.base.monolegged_robot_config import MonoLeggedRobotCfg
 
 class Ramiel2Flip(MonoLeggedRobot):
     def post_physics_step(self):
@@ -45,6 +47,18 @@ class Ramiel2Flip(MonoLeggedRobot):
             calls self._post_physics_step_callback() for common computations 
             calls self._draw_debug_vis() if needed
         """
+        # calculate projected_gravity_ref
+        current = self.common_step_counter
+        elapsed = (current - self.grav_ref_start_step).clamp(min=0)
+        is_flipping = elapsed <= self.grav_ref_total_steps 
+        self.non_flipping_score = torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        if is_flipping.any():
+            #linear interpolation of projected_gravity_ref
+            pitch_ref = self.pitch_ref_start + (self.pitch_ref_target - self.pitch_ref_start) * elapsed.float() / float(self.grav_ref_total_steps)
+            self.projected_gravity_ref[is_flipping, 0] = torch.cos(pitch_ref[is_flipping] - np.pi / 2)
+            self.projected_gravity_ref[is_flipping, 2] = torch.sin(pitch_ref[is_flipping] - np.pi / 2)
+            self.non_flipping_score[is_flipping] = 0.
+
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
 
@@ -64,11 +78,10 @@ class Ramiel2Flip(MonoLeggedRobot):
         self._post_physics_step_callback()
 
         # compute observations, rewards, resets, ...
-        self.non_flipping_score = 1.0 - 0.25 * torch.sum(torch.square(self.projected_gravity - self.projected_gravity_ref), dim=1) #when flipping: this will be 0, when not flipping: this will be 1
-        print(f"non_flipping_score: {self.non_flipping_score.cpu().numpy()}")
         self.check_termination()
         self.compute_reward()
         env_ids = self.reset_buf.nonzero(as_tuple=False).flatten()
+        self.just_reseted[env_ids] = True
         self.reset_idx(env_ids)
         self.compute_observations() # in some cases a simulation step might be required to refresh some obs (for example body positions)
 
@@ -80,6 +93,7 @@ class Ramiel2Flip(MonoLeggedRobot):
         self.tracking_error_sum[:, 2] += torch.abs(self.commands[:, 2] - self.base_ang_vel[:, 2])
         self.step_counter += 1
 
+        self.debug_viz = True
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
 
@@ -160,9 +174,19 @@ class Ramiel2Flip(MonoLeggedRobot):
 
         self.is_heading[env_ids] = (r.uniform_(0.0, 1.0) <= 0.5).float().reshape(-1, 1)
 
+        # get index in env_ids, such that self.just_reseted[env_ids] is False
+        not_reseted_ids = env_ids[~self.just_reseted[env_ids].flatten()]
+        self.just_reseted[env_ids] = False
+
         # set top-up commands true, if (int) half_turns_time is even number
-        self.is_top_up_command[env_ids] = (self.commands[env_ids, 4].to(torch.int) % 2 == 0)
-        self.projected_gravity_ref[env_ids, 2] = torch.where(self.is_top_up_command[env_ids], -1.0, 1.0)
+        old_traget = torch.where(self.is_top_up_command[not_reseted_ids], 0., np.pi) 
+        self.is_top_up_command[not_reseted_ids] = (self.commands[not_reseted_ids, 4].to(torch.int) % 2 == 0)
+        new_target = torch.where(self.is_top_up_command[not_reseted_ids], 0., np.pi) 
+        
+        # record the parameters fot interpolation of projected_gravity_ref
+        self.pitch_ref_start[not_reseted_ids] = old_traget
+        self.pitch_ref_target[not_reseted_ids] = new_target
+        self.grav_ref_start_step[not_reseted_ids] = self.common_step_counter
 
     def _reset_root_states(self, env_ids):
         """ Resets ROOT states position and velocities of selected environmments
@@ -210,7 +234,8 @@ class Ramiel2Flip(MonoLeggedRobot):
         self.is_top_up_command[env_ids[mask]] = True
         self.is_top_up_command[env_ids[~mask]] = False
         self.projected_gravity_ref[env_ids, 2] = torch.where(self.is_top_up_command[env_ids], -1.0, 1.0)
-
+        self.pitch_ref_start[env_ids] = torch.where(self.is_top_up_command[env_ids], 0., np.pi) 
+        self.pitch_ref_target[env_ids] = torch.where(self.is_top_up_command[env_ids], 0., np.pi) 
 
     def _update_terrain_curriculum(self, env_ids):
         """ Implements the game-inspired curriculum.
@@ -357,6 +382,11 @@ class Ramiel2Flip(MonoLeggedRobot):
         self.is_heading = torch.zeros(self.num_envs, 1, dtype=torch.float, device=self.device, requires_grad=False)
         self.tracking_error_sum = torch.zeros(self.num_envs, self.cfg.commands.num_commands, device=self.device, requires_grad=False)
         self.non_flipping_score = torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.pitch_ref_start  = torch.where(self.is_top_up_command, 0., np.pi) 
+        self.pitch_ref_target = torch.where(self.is_top_up_command, 0., np.pi)     
+        self.grav_ref_start_step = torch.zeros(self.num_envs, dtype=torch.int, device=self.device)  
+        self.grav_ref_total_steps = int(self.cfg.commands.grav_ref_transition_time / self.dt)
+        self.just_reseted = torch.ones(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
 
         # joint positions offsets and PD gains
         self.default_dof_pos = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
@@ -396,6 +426,47 @@ class Ramiel2Flip(MonoLeggedRobot):
         self.tension_ref_history = torch.zeros((self.num_envs, len(self.motor_idx), self.cfg.control.tension_cur_net.input_steps), dtype=torch.float, device=self.device, requires_grad=False)
         self.tendon_strain_history = torch.zeros((self.num_envs, len(self.motor_idx), self.cfg.control.tension_cur_net.input_steps), dtype=torch.float, device=self.device, requires_grad=False)
         self.tendon_vel_motor_history = torch.zeros((self.num_envs, len(self.motor_idx), self.cfg.control.tension_cur_net.input_steps), dtype=torch.float, device=self.device, requires_grad=False)
+
+    def _draw_debug_vis(self):
+        """ Draws visualizations for debugging (slows down simulation a lot).
+            Now includes gravity vectors from each robot origin.
+        """
+        # clear previous lines and refresh state
+        self.gym.clear_lines(self.viewer)
+        self.gym.refresh_rigid_body_state_tensor(self.sim)
+
+        # draw height points if enabled
+        if self.terrain.cfg.measure_heights:
+            sphere_geom = gymutil.WireframeSphereGeometry(0.02, 4, 4, None, color=(1, 1, 0))
+            for i in range(self.num_envs):
+                base_pos = self.root_states[i, :3].cpu().numpy()
+                heights = self.measured_heights[i].cpu().numpy()
+                height_points = quat_apply_yaw(
+                    self.base_quat[i].repeat(heights.shape[0]),
+                    self.height_points[i]
+                ).cpu().numpy()
+                for j in range(heights.shape[0]):
+                    x = height_points[j, 0] + base_pos[0]
+                    y = height_points[j, 1] + base_pos[1]
+                    z = heights[j]
+                    sphere_pose = gymapi.Transform(gymapi.Vec3(x, y, z), gymapi.Quat(0, 0, 0, 1))
+                    gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], sphere_pose)
+
+        # draw gravity vectors for all envs
+        for i in range(self.num_envs):
+            base_pos = self.root_states[i, :3].cpu().numpy()
+
+            # prepare points array: origin to gravity
+            g = self.projected_gravity[i].cpu().numpy()
+            pts = np.array([base_pos, base_pos + g], dtype=np.float32)
+            cols = np.array([[1.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=np.float32) # red line
+            self.gym.add_lines(self.viewer, self.envs[i], 1, pts, cols)
+
+            # reference gravity
+            gr = self.projected_gravity_ref[i].cpu().numpy()
+            pts_ref = np.array([base_pos, base_pos + gr], dtype=np.float32)
+            cols_ref = np.array([[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float32) # green line
+            self.gym.add_lines(self.viewer, self.envs[i], 1, pts_ref, cols_ref)
 
     #------------ reward functions for flipping---------------- 
     def _reward_orientation_flip(self):

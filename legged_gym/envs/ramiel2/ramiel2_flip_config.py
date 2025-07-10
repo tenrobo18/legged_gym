@@ -33,9 +33,9 @@ import torch
 from torch import Tensor
 
 enable_tendon = False
-stage =  "first"
+# stage =  "first"
 # stage = "second"
-# stage = "flip"
+stage = "flip"
 
 class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
     class env(MonoLeggedRobotCfg.env):
@@ -116,6 +116,7 @@ class Ramiel2FlipCfg( MonoLeggedRobotCfg ):
             resampling_time = 3.
         heading_command = False # if true: compute ang vel command from heading error
         delay_range = [0.01, 0.04]
+        grav_ref_transition_time = 0.3 # projected_gravity_ref transition time [s]
         class ranges:
             lin_vel_x = [-0.8, 0.8] # min max [m/s]
             lin_vel_y = [-0.8, 0.8]   # min max [m/s]
