@@ -48,19 +48,19 @@ import matplotlib.pyplot as plt
 fixed = True
 
 # slide joint log
-# log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_05_27_18_11_46_jointchirp_jointslide_10s_-0.2rad-0.2rad_2Hz-10Hz.csv"
-# start_time = 168.1
-# end_time = 178.
+log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_09_02_17_41_43_jointchirp_jointslide_10s_-0.15rad-0.15rad_2Hz-10Hz.csv"
+start_time = 34.9
+end_time = 44.8
 
 #roll joint log
-# log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_05_27_18_28_04_jointchirp_jointroll_10s_-0.5rad-0.5rad_2Hz-10Hz.csv"
-# start_time = 59.1
-# end_time = 69.
+# log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_09_02_20_19_49_jointchirp_jointroll_10s_-0.5rad-0.5rad_2Hz-10Hz.csv"
+# start_time = 29.7
+# end_time = 39.6
 
 #pitch joint log
-log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_05_27_18_29_53_jointchirp_jointpitch_10s_-0.5rad-0.5rad_2Hz-10Hz.csv"
-start_time = 52.9
-end_time = 62.8
+# log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_09_02_20_23_21_jointchirp_jointpitch_10s_-0.5rad-0.5rad_2Hz-10Hz.csv"
+# start_time = 31.8
+# end_time = 41.7
 
 class RecordedPolicy:
     def __init__(self, df_):
