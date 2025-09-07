@@ -48,9 +48,9 @@ import matplotlib.pyplot as plt
 fixed = True
 
 # slide joint log
-log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_09_02_17_41_43_jointchirp_jointslide_10s_-0.15rad-0.15rad_2Hz-10Hz.csv"
-start_time = 34.9
-end_time = 44.8
+# log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_09_02_17_41_43_jointchirp_jointslide_10s_-0.15rad-0.15rad_2Hz-10Hz.csv"
+# start_time = 34.9
+# end_time = 44.8
 
 #roll joint log
 # log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_09_02_20_19_49_jointchirp_jointroll_10s_-0.5rad-0.5rad_2Hz-10Hz.csv"
@@ -61,6 +61,21 @@ end_time = 44.8
 # log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_09_02_20_23_21_jointchirp_jointpitch_10s_-0.5rad-0.5rad_2Hz-10Hz.csv"
 # start_time = 31.8
 # end_time = 41.7
+
+#slide joint log, kd = 0
+# log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_09_05_11_14_55_jointchirp_jointslide_10s_-0.07rad-0.07rad_2Hz-10Hz_kd0.csv"
+# start_time = 61.5
+# end_time = 71.4
+
+#roll joint log, kd = 0
+# log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_09_05_11_18_24_jointchirp_jointroll_10s_-0.5rad-0.5rad_2Hz-10Hz_kd0.csv"
+# start_time = 43.2
+# end_time = 53.1
+
+#pitch joint log, kd = 0
+log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_09_05_11_21_05_jointchirp_jointpitch_10s_-0.5rad-0.5rad_2Hz-10Hz_kd0.csv"
+start_time = 55.3
+end_time = 65.2
 
 class RecordedPolicy:
     def __init__(self, df_):
