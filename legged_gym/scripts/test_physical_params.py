@@ -58,9 +58,9 @@ fixed = True
 # end_time = 39.6
 
 #pitch joint log
-# log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_09_02_20_23_21_jointchirp_jointpitch_10s_-0.5rad-0.5rad_2Hz-10Hz.csv"
-# start_time = 31.8
-# end_time = 41.7
+log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_09_02_20_23_21_jointchirp_jointpitch_10s_-0.5rad-0.5rad_2Hz-10Hz.csv"
+start_time = 31.8
+end_time = 41.7
 
 #slide joint log, kd = 0
 # log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_09_05_11_14_55_jointchirp_jointslide_10s_-0.07rad-0.07rad_2Hz-10Hz_kd0.csv"
@@ -73,9 +73,9 @@ fixed = True
 # end_time = 53.1
 
 #pitch joint log, kd = 0
-log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_09_05_11_21_05_jointchirp_jointpitch_10s_-0.5rad-0.5rad_2Hz-10Hz_kd0.csv"
-start_time = 55.3
-end_time = 65.2
+# log_file = "~/legged_gym/legged_gym/scripts/data/log-2025_09_05_11_21_05_jointchirp_jointpitch_10s_-0.5rad-0.5rad_2Hz-10Hz_kd0.csv"
+# start_time = 55.3
+# end_time = 65.2
 
 class RecordedPolicy:
     def __init__(self, df_):
