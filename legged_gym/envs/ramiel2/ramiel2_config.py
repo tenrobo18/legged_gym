@@ -119,7 +119,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
     class control( MonoLeggedRobotCfg.control ):
         # PD Drive parameters:
         stiffness = {'roll': 50.0, 'pitch': 50.0, 'slide': 2000.}  # [N*m/rad]
-        damping = {'roll': 9., 'pitch': 10.5, 'slide': 100.}  # [N*m*s/rad]
+        damping = {'roll': 0.9, 'pitch': 3.0, 'slide': 60.}  # [N*m*s/rad]
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 0.2
         # decimation: Number of control action updates @ sim DT per policy DT
@@ -148,7 +148,7 @@ class Ramiel2FlatCfg( MonoLeggedRobotCfg ):
         flip_visual_attachments = False
         self_collisions = 1 # 1 to disable, 0 to enable...bitwise filter
         dof_damping = {'motor_0': 0.05, 'motor_1': 0.05, 'motor_2': 0.05, 'motor_3': 0.05, 'motor_4': 0.05, 'motor_5': 0.05, 'roll': 0., 'pitch': 0., 'slide': 0.}
-        dof_friction = {'motor_0': 0., 'motor_1': 0., 'motor_2': 0., 'motor_3': 0., 'motor_4': 0., 'motor_5': 0., 'roll': 0.2, 'pitch': 0.25, 'slide': 4.}
+        dof_friction = {'motor_0': 0., 'motor_1': 0., 'motor_2': 0., 'motor_3': 0., 'motor_4': 0., 'motor_5': 0., 'roll': 0.3, 'pitch': 0.3, 'slide': 3.}
         dof_armature = {'motor_0': 0., 'motor_1': 0., 'motor_2': 0., 'motor_3': 0., 'motor_4': 0., 'motor_5': 0., 'roll': 0.54811795, 'pitch': 0.54811064, 'slide': 9.51120847}
         dof_kind = {'motor_0' : 'motor', 'motor_1' : 'motor', 'motor_2' : 'motor', 'motor_3' : 'motor', 'motor_4' : 'motor', 'motor_5' : 'motor', 'roll' : 'joint', 'pitch' : 'joint', 'slide' : 'joint'}
         tension_min = torch.tensor([50.0, 50.0, 50.0, 50.0, 50.0, 50.0])
